@@ -42,7 +42,10 @@ ENV/
 
 # Output files
 output/
-*.json
+
+# Configuration files (exclude sensitive config, keep examples)
+config.json
+!config.example.json
 
 # Logs
 *.log

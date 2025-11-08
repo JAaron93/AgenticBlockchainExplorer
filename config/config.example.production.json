@@ -1,0 +1,87 @@
+{
+  "_comment": "PRODUCTION CONFIGURATION - Review all security-sensitive settings before deployment",
+  "explorers": [
+    {
+      "name": "etherscan",
+      "base_url": "https://api.etherscan.io/api",
+      "api_key": "YOUR_ETHERSCAN_API_KEY",
+      "type": "api",
+      "chain": "ethereum"
+    },
+    {
+      "name": "bscscan",
+      "base_url": "https://api.bscscan.com/api",
+      "api_key": "YOUR_BSCSCAN_API_KEY",
+      "type": "api",
+      "chain": "bsc"
+    },
+    {
+      "name": "polygonscan",
+      "base_url": "https://api.polygonscan.com/api",
+      "api_key": "YOUR_POLYGONSCAN_API_KEY",
+      "type": "api",
+      "chain": "polygon"
+    }
+  ],
+  "stablecoins": {
+    "USDC": {
+      "ethereum": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "bsc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      "polygon": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+    },
+    "USDT": {
+      "ethereum": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "bsc": "0x55d398326f99059fF775485246999027B3197955",
+      "polygon": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
+    }
+  },
+  "auth0": {
+    "domain": "your-tenant.auth0.com",
+    "client_id": "your_auth0_client_id",
+    "client_secret": "your_auth0_client_secret",
+    "audience": "https://your-api-identifier",
+    "callback_url": "https://your-production-domain.com/callback",
+    "logout_url": "https://your-production-domain.com"
+  },
+  "database": {
+    "url": "postgresql://<USER>:<PASSWORD>@<DB_HOST>:5432/stablecoin_explorer",
+    "pool_size": 20,
+    "max_overflow": 40
+  },
+  "app": {
+    "env": "production",
+    "host": "0.0.0.0",
+    "port": 8000,
+    "debug": false,
+    "secret_key": "<GENERATE_STRONG_SECRET_KEY_AT_LEAST_32_CHARS>"
+  },
+  "output": {
+    "directory": "./output",
+    "max_records_per_explorer": 1000
+  },
+  "retry": {
+    "max_attempts": 3,
+    "backoff_seconds": 60,
+    "request_timeout_seconds": 30,
+    "max_concurrent_requests": 5
+  },
+  "rate_limit": {
+    "per_minute": 100
+  },
+  "logging": {
+    "level": "WARNING",
+    "format": "json"
+  },
+  "cors": {
+    "allowed_origins": [
+      "https://your-production-domain.com"
+    ],
+    "allow_credentials": true
+  },
+  "session": {
+    "timeout_hours": 24,
+    "cookie_secure": true,
+    "cookie_httponly": true,
+    "cookie_samesite": "strict"
+  }
+}
