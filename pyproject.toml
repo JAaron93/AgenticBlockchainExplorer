@@ -19,7 +19,7 @@ pydantic-settings = "^2.1.0"
 alembic = "^1.12.1"
 psycopg2-binary = "^2.9.9"
 python-dotenv = "^1.0.0"
-python-multipart = "^0.0.6"
+python-multipart = "^0.0.18"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
