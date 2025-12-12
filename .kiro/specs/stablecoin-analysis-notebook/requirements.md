@@ -101,7 +101,7 @@ This document specifies the requirements for a marimo Python notebook that analy
    - **Combined Completeness**: completeness_percent = 0.7 × field_completeness + 0.3 × chain_coverage (field completeness weighted 70%, chain coverage weighted 30%)
    - **Normalized Sample Size**: normalized_sample_size = min(sample_size / 1000, 1.0)
    - **Combined Confidence Formula**: confidence_score = 0.6 × normalized_sample_size + 0.4 × completeness_percent
-   - **Final Confidence Mapping**: High (score ≥ 0.85), Medium (score 0.50-0.85), Low (score < 0.50)
+   - **Final Confidence Mapping**: High (score ≥ 0.85), Medium (0.50 ≤ score < 0.85), Low (score < 0.50)
    - **Example - High Confidence**: 1500 transactions, 98% field completeness, 3 chains → chain_coverage=1.0, completeness=0.7×0.98+0.3×1.0=0.986, score=0.6×1.0+0.4×0.986=0.994 → "High"
    - **Example - Medium Confidence**: 500 transactions, 95% field completeness, 2 chains → chain_coverage=0.667, completeness=0.7×0.95+0.3×0.667=0.865, score=0.6×0.5+0.4×0.865=0.646 → "Medium"
    - **Example - Low Confidence**: 50 transactions, 80% field completeness, 1 chain → chain_coverage=0.333, completeness=0.7×0.80+0.3×0.333=0.66, score=0.6×0.05+0.4×0.66=0.294 → "Low"

@@ -432,7 +432,7 @@ def calculate_confidence(data: LoadedData) -> ConfidenceMetrics:
 **Validates: Requirements 8.4**
 
 ### Property 11: Confidence calculation bounds
-*For any* dataset, the calculated confidence indicator SHALL be a valid ConfidenceLevel enum value (HIGH, MEDIUM, or LOW) based on the formula: confidence_score = 0.6 × min(sample_size/1000, 1.0) + 0.4 × completeness_percent, mapped via ConfidenceLevel.from_score() where HIGH ≥ 0.85, MEDIUM 0.50-0.85, LOW < 0.50.
+*For any* dataset, the calculated confidence indicator SHALL be a valid ConfidenceLevel enum value (HIGH, MEDIUM, or LOW) based on the formula: confidence_score = 0.6 × min(sample_size/1000, 1.0) + 0.4 × completeness_percent, mapped via ConfidenceLevel.from_score() where HIGH (score ≥ 0.85), MEDIUM (0.50 ≤ score < 0.85), LOW (score < 0.50).
 **Validates: Requirements 7.3**
 
 ### Property 12: Error detection completeness
