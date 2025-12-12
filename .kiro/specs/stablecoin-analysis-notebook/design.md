@@ -161,20 +161,111 @@ def generate_sample_data(config: SampleDataConfig) -> LoadedData:
 ### 5. Summary Generator
 
 ```python
+from enum import Enum
+
+class ConfidenceLevel(str, Enum):
+    """Confidence level for analysis conclusions.
+    
+    Inherits from str to enable JSON serialization as string values.
+    Use .value for string representation, e.g., ConfidenceLevel.HIGH.value == "high"
+    """
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    
+    @classmethod
+    def from_score(cls, score: float) -> "ConfidenceLevel":
+        """Map confidence score to level based on thresholds.
+        
+        Args:
+            score: Confidence score between 0.0 and 1.0
+            
+        Returns:
+            ConfidenceLevel.HIGH if score >= 0.85
+            ConfidenceLevel.MEDIUM if 0.50 <= score < 0.85
+            ConfidenceLevel.LOW if score < 0.50
+        """
+        if score >= 0.85:
+            return cls.HIGH
+        elif score >= 0.50:
+            return cls.MEDIUM
+        else:
+            return cls.LOW
+
 @dataclass
 class Conclusion:
     """Analysis conclusion with confidence."""
     finding: str
     value: str
-    confidence: str  # "high", "medium", "low"
+    confidence: ConfidenceLevel
     explanation: str
+    
+    def to_dict(self) -> dict:
+        """Serialize to dictionary with confidence as string value."""
+        return {
+            "finding": self.finding,
+            "value": self.value,
+            "confidence": self.confidence.value,  # Serialize enum to string
+            "explanation": self.explanation,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "Conclusion":
+        """Deserialize from dictionary, mapping string to ConfidenceLevel."""
+        return cls(
+            finding=data["finding"],
+            value=data["value"],
+            confidence=ConfidenceLevel(data["confidence"]),  # Parse string to enum
+            explanation=data["explanation"],
+        )
+
+@dataclass
+class ConfidenceMetrics:
+    """Metrics used for confidence calculation."""
+    sample_size: int
+    completeness_percent: float
+    chain_coverage: float  # chains_with_data / 3
+    confidence_score: float
+    confidence_level: ConfidenceLevel
+    
+    def to_dict(self) -> dict:
+        """Serialize to dictionary with confidence_level as string value."""
+        return {
+            "sample_size": self.sample_size,
+            "completeness_percent": self.completeness_percent,
+            "chain_coverage": self.chain_coverage,
+            "confidence_score": self.confidence_score,
+            "confidence_level": self.confidence_level.value,
+        }
 
 def generate_conclusions(results: AnalysisResults, data: LoadedData) -> list[Conclusion]:
-    """Generate summary conclusions from analysis."""
+    """Generate summary conclusions from analysis.
+    
+    Returns:
+        List of Conclusion objects with ConfidenceLevel enum values.
+    """
     ...
 
-def calculate_confidence(data: LoadedData) -> str:
-    """Calculate confidence level based on data quality."""
+def calculate_confidence(data: LoadedData) -> ConfidenceMetrics:
+    """Calculate confidence level based on data quality.
+    
+    Formula:
+        normalized_sample_size = min(sample_size / 1000, 1.0)
+        confidence_score = 0.6 * normalized_sample_size + 0.4 * completeness_percent
+    
+    Thresholds (via ConfidenceLevel.from_score):
+        - HIGH: score >= 0.85
+        - MEDIUM: 0.50 <= score < 0.85
+        - LOW: score < 0.50
+    
+    Completeness is calculated as:
+        - Percentage of non-null required fields (transaction_hash, timestamp, 
+          amount, stablecoin, chain, activity_type) across all records
+        - Plus chain coverage factor (chains_with_data / 3)
+    
+    Returns:
+        ConfidenceMetrics with confidence_level as ConfidenceLevel enum.
+    """
     ...
 ```
 
@@ -305,7 +396,7 @@ def calculate_confidence(data: LoadedData) -> str:
 **Validates: Requirements 8.4**
 
 ### Property 11: Confidence calculation bounds
-*For any* dataset, the calculated confidence indicator SHALL be one of "high", "medium", or "low" based on defined thresholds.
+*For any* dataset, the calculated confidence indicator SHALL be a valid ConfidenceLevel enum value (HIGH, MEDIUM, or LOW) based on the formula: confidence_score = 0.6 × min(sample_size/1000, 1.0) + 0.4 × completeness_percent, mapped via ConfidenceLevel.from_score() where HIGH ≥ 0.85, MEDIUM 0.50-0.85, LOW < 0.50.
 **Validates: Requirements 7.3**
 
 ### Property 12: Error detection completeness

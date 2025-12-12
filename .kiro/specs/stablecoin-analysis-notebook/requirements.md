@@ -16,6 +16,7 @@ This document specifies the requirements for a marimo Python notebook that analy
 - **Chain**: The blockchain network (Ethereum, BSC, Polygon)
 - **Holding Period**: Number of days since last outgoing transfer from an address
 - **JSON Export**: The structured output file from the data collection agent containing transactions, holders, and summary data
+- **Gas Cost**: The transaction fee paid on a blockchain, computed as gas_used × gas_price; gas_price is stored in wei (10^-18 of native token)
 
 ## Requirements
 
@@ -26,9 +27,9 @@ This document specifies the requirements for a marimo Python notebook that analy
 #### Acceptance Criteria
 
 1. WHEN the notebook initializes THEN the Notebook SHALL provide a file selector UI element to choose JSON export files from the output directory
-2. WHEN a user selects a JSON file THEN the Notebook SHALL parse and validate the JSON structure against the expected schema
+2. WHEN a user selects a JSON file THEN the Notebook SHALL parse and validate the JSON structure against the canonical schema defined in Appendix A: JSON Schema Specification
 3. WHEN JSON parsing succeeds THEN the Notebook SHALL convert transaction and holder data into pandas DataFrames for analysis
-4. IF the JSON file is malformed or missing required fields THEN the Notebook SHALL display a clear error message indicating the validation failure
+4. IF the JSON file is malformed or missing required fields THEN the Notebook SHALL display a clear error message indicating the validation failure per the validation rules in Appendix A
 5. WHEN data is loaded THEN the Notebook SHALL display metadata including run_id, collection timestamp, explorers queried, and total record count
 
 ### Requirement 2
@@ -51,7 +52,7 @@ This document specifies the requirements for a marimo Python notebook that analy
 1. WHEN data is loaded THEN the Notebook SHALL group transactions by stablecoin type and calculate activity type distribution for each
 2. WHEN displaying stablecoin comparison THEN the Notebook SHALL render a grouped bar chart comparing activity types across stablecoins
 3. WHEN data is loaded THEN the Notebook SHALL calculate average transaction size per stablecoin
-4. WHEN data is loaded THEN the Notebook SHALL calculate the ratio of store-of-value holders to active transactors per stablecoin
+4. WHEN data is loaded THEN the Notebook SHALL calculate the ratio of store-of-value holders to active transactors per stablecoin globally (aggregated across all chains); for example, if there are 30 USDC holders with is_store_of_value=true and 70 USDC holders with is_store_of_value=false across all chains, the USDC SoV ratio is 30:70 or 0.43
 
 ### Requirement 4
 
@@ -62,7 +63,7 @@ This document specifies the requirements for a marimo Python notebook that analy
 1. WHEN data is loaded THEN the Notebook SHALL calculate the percentage of holders classified as store_of_value versus active transactors
 2. WHEN displaying holder analysis THEN the Notebook SHALL render a histogram of holder balances segmented by store_of_value status
 3. WHEN data is loaded THEN the Notebook SHALL calculate the average and median holding period for store_of_value holders
-4. WHEN data is loaded THEN the Notebook SHALL identify the top 10 holders by balance and display their store_of_value classification
+4. WHEN data is loaded THEN the Notebook SHALL identify the top 10 holders by balance globally (across all stablecoins and chains combined), sorted by descending balance, and display each holder's address, balance, stablecoin, chain, and store_of_value classification
 
 ### Requirement 5
 
@@ -83,7 +84,7 @@ This document specifies the requirements for a marimo Python notebook that analy
 
 1. WHEN data is loaded THEN the Notebook SHALL group transactions by chain (Ethereum, BSC, Polygon) and calculate metrics for each
 2. WHEN displaying chain comparison THEN the Notebook SHALL render a stacked bar chart showing activity type distribution per chain
-3. WHEN data is loaded THEN the Notebook SHALL calculate average transaction size and gas costs per chain
+3. WHEN data is loaded THEN the Notebook SHALL calculate average transaction size and average gas cost per chain, where gas cost is computed as: gas_cost = gas_used × gas_price (in wei), converted to native token units (ETH/BNB/MATIC) by dividing by 10^18; transactions with null gas_used or gas_price fields SHALL be excluded from gas cost calculations and the count of excluded transactions SHALL be noted
 4. WHEN data is loaded THEN the Notebook SHALL calculate the store_of_value ratio per chain
 
 ### Requirement 7
@@ -94,7 +95,15 @@ This document specifies the requirements for a marimo Python notebook that analy
 
 1. WHEN analysis is complete THEN the Notebook SHALL calculate an overall "transaction vs store_of_value" ratio based on both transaction counts and holder classifications
 2. WHEN displaying conclusions THEN the Notebook SHALL render a summary panel with key findings including dominant usage pattern, chain with highest transaction activity, and stablecoin with highest store_of_value ratio
-3. WHEN displaying conclusions THEN the Notebook SHALL provide a confidence indicator based on sample size and data completeness
+3. WHEN displaying conclusions THEN the Notebook SHALL calculate and display a confidence indicator using the following formula and thresholds:
+   - **Sample Size Score**: High (>1000 transactions), Medium (100-1000 transactions), Low (<100 transactions)
+   - **Data Completeness Score**: Percentage of non-null required fields (transaction_hash, timestamp, amount, stablecoin, chain, activity_type) across all records, plus chain coverage (number of chains with data / 3)
+   - **Completeness Thresholds**: High (≥95%), Medium (80-95%), Low (<80%)
+   - **Combined Confidence Formula**: confidence_score = 0.6 × normalized_sample_size + 0.4 × completeness_percent, where normalized_sample_size = min(sample_size / 1000, 1.0)
+   - **Final Confidence Mapping**: High (score ≥ 0.85), Medium (score 0.50-0.85), Low (score < 0.50)
+   - **Example - High Confidence**: 1500 transactions, 98% completeness, 3 chains → score = 0.6×1.0 + 0.4×0.98 = 0.992 → "High"
+   - **Example - Medium Confidence**: 500 transactions, 90% completeness, 2 chains → score = 0.6×0.5 + 0.4×0.90 = 0.66 → "Medium"
+   - **Example - Low Confidence**: 50 transactions, 75% completeness, 1 chain → score = 0.6×0.05 + 0.4×0.75 = 0.33 → "Low"
 4. WHEN data contains errors from collection THEN the Notebook SHALL display warnings about data quality issues that may affect conclusions
 
 ### Requirement 8
@@ -107,3 +116,146 @@ This document specifies the requirements for a marimo Python notebook that analy
 2. WHEN generating sample data THEN the Notebook SHALL create realistic transaction and holder records following the same schema as real exports
 3. WHEN using sample data THEN the Notebook SHALL clearly indicate that analysis is based on synthetic data, not real blockchain data
 4. WHEN generating sample data THEN the Notebook SHALL allow configuration of sample size and distribution parameters via UI controls
+
+
+---
+
+## Appendix A: JSON Schema Specification
+
+This appendix defines the canonical JSON schema for stablecoin export data. All validation in Requirement 1 Acceptance Criteria 2 and 4 SHALL use this schema.
+
+### Top-Level Structure
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| metadata | object | Yes | Collection run metadata |
+| summary | object | Yes | Aggregated statistics |
+| transactions | array | Yes | List of transaction records |
+| holders | array | Yes | List of holder records |
+| errors | array | No | Collection errors (if any) |
+
+### Metadata Object
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| run_id | string | Yes | Non-empty, unique identifier | UUID or unique run identifier |
+| collection_timestamp | string | Yes | ISO-8601 format | When data was collected |
+| agent_version | string | Yes | Semantic version format | Version of collection agent |
+| explorers_queried | array[string] | Yes | Non-empty array | List of explorer sources |
+| total_records | integer | Yes | >= 0 | Total transaction + holder count |
+| user_id | string | No | - | User who initiated collection |
+
+### Transaction Object
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| transaction_hash | string | Yes | Non-empty, unique per record | Blockchain transaction hash |
+| block_number | integer | Yes | >= 0 | Block containing transaction |
+| timestamp | string | Yes | ISO-8601 format | Transaction timestamp |
+| from_address | string | Yes | Non-empty, valid address format | Sender wallet address |
+| to_address | string | Yes | Non-empty, valid address format | Receiver wallet address |
+| amount | string | Yes | Decimal string, >= 0 | Transaction amount (as string for precision) |
+| stablecoin | string | Yes | Enum: "USDC", "USDT" | Token type |
+| chain | string | Yes | Enum: "ethereum", "bsc", "polygon" | Blockchain network |
+| activity_type | string | Yes | Enum: "transaction", "store_of_value", "other" | Activity classification |
+| source_explorer | string | Yes | Non-empty | Data source explorer name |
+| gas_used | integer | No | >= 0 if present | Gas units consumed by transaction |
+| gas_price | string | No | Decimal string, >= 0 if present | Gas price in wei (10^-18 of native token: ETH/BNB/MATIC) |
+
+### Holder Object
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| address | string | Yes | Non-empty, valid address format | Wallet address |
+| balance | string | Yes | Decimal string, >= 0 | Current token balance (as string) |
+| stablecoin | string | Yes | Enum: "USDC", "USDT" | Token type |
+| chain | string | Yes | Enum: "ethereum", "bsc", "polygon" | Blockchain network |
+| first_seen | string | Yes | ISO-8601 format | First activity timestamp |
+| last_activity | string | Yes | ISO-8601 format, >= first_seen | Last activity timestamp |
+| is_store_of_value | boolean | Yes | true or false | SoV classification |
+| source_explorer | string | Yes | Non-empty | Data source explorer name |
+
+### Summary Object
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| by_stablecoin | object | Yes | Metrics grouped by stablecoin type |
+| by_activity_type | object | Yes | Counts grouped by activity type |
+| by_chain | object | Yes | Counts grouped by blockchain |
+
+### Validation Failure Rules
+
+The Notebook SHALL reject JSON data and display an error message when:
+
+1. **Missing Required Field**: Any required field listed above is absent
+2. **Wrong Type**: Field value does not match expected type (e.g., string where integer expected)
+3. **Invalid Enum Value**: Field with enum constraint contains unlisted value
+4. **Out-of-Range Value**: Numeric field is negative when >= 0 required
+5. **Invalid Timestamp**: Timestamp field is not valid ISO-8601 format
+6. **Invalid Decimal String**: Amount/balance field cannot be parsed as decimal
+7. **Temporal Constraint Violation**: last_activity < first_seen for holder records
+8. **Empty Required Array**: transactions or holders array is missing (empty arrays are valid)
+
+### Example Valid JSON Document
+
+```json
+{
+  "metadata": {
+    "run_id": "550e8400-e29b-41d4-a716-446655440000",
+    "collection_timestamp": "2024-12-12T10:30:00Z",
+    "agent_version": "1.0.0",
+    "explorers_queried": ["etherscan", "bscscan"],
+    "total_records": 3
+  },
+  "summary": {
+    "by_stablecoin": {
+      "USDC": {"transaction_count": 1, "total_volume": "1000.50"},
+      "USDT": {"transaction_count": 1, "total_volume": "500.00"}
+    },
+    "by_activity_type": {"transaction": 2, "store_of_value": 0, "other": 0},
+    "by_chain": {"ethereum": 1, "bsc": 1, "polygon": 0}
+  },
+  "transactions": [
+    {
+      "transaction_hash": "0xabc123def456789...",
+      "block_number": 18500000,
+      "timestamp": "2024-12-10T14:22:33Z",
+      "from_address": "0x1234567890abcdef1234567890abcdef12345678",
+      "to_address": "0xabcdef1234567890abcdef1234567890abcdef12",
+      "amount": "1000.50",
+      "stablecoin": "USDC",
+      "chain": "ethereum",
+      "activity_type": "transaction",
+      "source_explorer": "etherscan",
+      "gas_used": 65000,
+      "gas_price": "30000000000"
+    },
+    {
+      "transaction_hash": "0xdef789abc123456...",
+      "block_number": 35000000,
+      "timestamp": "2024-12-11T09:15:00Z",
+      "from_address": "0x9876543210fedcba9876543210fedcba98765432",
+      "to_address": "0xfedcba9876543210fedcba9876543210fedcba98",
+      "amount": "500.00",
+      "stablecoin": "USDT",
+      "chain": "bsc",
+      "activity_type": "transaction",
+      "source_explorer": "bscscan",
+      "gas_used": 45000,
+      "gas_price": "5000000000"
+    }
+  ],
+  "holders": [
+    {
+      "address": "0x1234567890abcdef1234567890abcdef12345678",
+      "balance": "5000.00",
+      "stablecoin": "USDC",
+      "chain": "ethereum",
+      "first_seen": "2024-01-15T00:00:00Z",
+      "last_activity": "2024-12-10T14:22:33Z",
+      "is_store_of_value": false,
+      "source_explorer": "etherscan"
+    }
+  ]
+}
+```
