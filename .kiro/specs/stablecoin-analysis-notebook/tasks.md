@@ -66,19 +66,19 @@
     - Display average transaction size comparison
     - _Requirements: 3.2_
 
-- [ ] 5. Implement holder behavior analysis
-  - [ ] 5.1 Create holder metrics calculation functions
+- [x] 5. Implement holder behavior analysis
+  - [x] 5.1 Create holder metrics calculation functions
     - Implement `analyze_holders(holders_df, transactions_df) -> HolderMetrics`
     - Calculate SoV percentage, average balances, holding periods
     - Identify top 10 holders by balance
     - _Requirements: 4.1, 4.3, 4.4_
-  - [ ] 5.2 Write property test for holder classification consistency
+  - [x] 5.2 Write property test for holder classification consistency
     - **Property 6: Holder classification consistency**
     - **Validates: Requirements 4.1**
-  - [ ] 5.3 Write property test for top-N ordering correctness
+  - [x] 5.3 Write property test for top-N ordering correctness
     - **Property 7: Top-N ordering correctness**
     - **Validates: Requirements 4.4**
-  - [ ] 5.4 Create holder analysis visualization cell
+  - [x] 5.4 Create holder analysis visualization cell
     - Implement histogram of balances by SoV status
     - Display top holders table with classifications
     - _Requirements: 4.2, 4.4_
@@ -125,7 +125,7 @@
     - Add configuration inputs for sample size, SoV ratio
     - Implement `generate_conclusions(results, data) -> list[Conclusion]`
     - Calculate overall transaction vs SoV ratio
-    - _Requirements: 7.1, 7.2, 8.3, 8.4_
+    - _Implements Requirements: 7.1, 7.2 (conclusions), 8.3 (sample indicator), 8.4 (config UI)_
   - [ ] 8.5 Write property test for confidence calculation bounds
     - **Property 11: Confidence calculation bounds**
     - **Validates: Requirements 7.3**
@@ -293,7 +293,7 @@
     - Ensure proper cell ordering and dependencies
     - Add loading states for long computations
     - Test end-to-end flow from pipeline trigger to visualization
-    - _Requirements: All_
+    - _Requirements: 1.1, 10.1, 13.3, 13.4, 14.1, 14.4_
   - [ ] 18.2 Add documentation and usage instructions
     - Add markdown cells explaining each analysis section
     - Document ZenML pipeline usage

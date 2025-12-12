@@ -434,44 +434,12 @@ def master_pipeline(
     
     # ML inference
     features = feature_engineering_step(transactions, holders)
-@pipeline
-def master_pipeline(
-    stablecoins: list[str] = ["USDC", "USDT"],
-    date_range_days: int = 7,
-):
-    """Master pipeline orchestrating collection, analysis, and ML inference.
-    
-    This is the pipeline triggered by weekly cron jobs.
-    """
-    # Data collection
-    eth_data = etherscan_collector_step(stablecoins, date_range_days)
-    bsc_data = bscscan_collector_step(stablecoins, date_range_days)
-    poly_data = polygonscan_collector_step(stablecoins, date_range_days)
-    transactions, holders = aggregate_data_step(eth_data, bsc_data, poly_data)
-    
-    # Analysis
-    activity = activity_analysis_step(transactions)
-    holder_metrics = holder_analysis_step(holders, transactions)
-    time_series = time_series_step(transactions)
-    chain_metrics = chain_analysis_step(transactions)
-    
-    # ML inference
-    features = feature_engineering_step(transactions, holders)
     # Load production models from registry
     client = Client()
     sov_model = client.get_artifact_version("sov_model", version="production")
     wallet_model = client.get_artifact_version("wallet_classifier", version="production")
     sov_predictions = predict_sov_step(features, sov_model)
     wallet_classes = classify_wallets_step(features, wallet_model)
-    
-    return {
-        "activity": activity,
-        "holder_metrics": holder_metrics,
-        "time_series": time_series,
-        "chain_metrics": chain_metrics,
-        "sov_predictions": sov_predictions,
-        "wallet_classifications": wallet_classes,
-    }
     
     return {
         "activity": activity,

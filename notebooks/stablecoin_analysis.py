@@ -147,6 +147,10 @@ def data_modules():
         StablecoinComparison,
         analyze_by_stablecoin,
         calculate_average_transaction_size,
+        HolderMetrics,
+        TopHolder,
+        analyze_holders,
+        get_top_holders,
     )
 
     return (
@@ -160,6 +164,10 @@ def data_modules():
         StablecoinComparison,
         analyze_by_stablecoin,
         calculate_average_transaction_size,
+        HolderMetrics,
+        TopHolder,
+        analyze_holders,
+        get_top_holders,
     )
 
 
@@ -671,6 +679,235 @@ def display_avg_chart(mo, loaded_data, stablecoin_comparison, avg_chart):
         return mo.ui.altair_chart(avg_chart)
     except Exception:
         return avg_chart
+
+
+# =============================================================================
+# Holder Behavior Analysis (Task 5)
+# =============================================================================
+
+
+@app.cell
+def holder_analysis_cell(loaded_data, analyze_holders, get_top_holders):
+    """Analyze holder behavior patterns."""
+    holder_metrics = None
+    top_holders = None
+
+    if loaded_data is not None and not loaded_data.holders_df.empty:
+        holder_metrics = analyze_holders(
+            loaded_data.holders_df,
+            loaded_data.transactions_df,
+        )
+        top_holders = get_top_holders(loaded_data.holders_df, n=10)
+
+    return holder_metrics, top_holders
+
+
+@app.cell
+def holder_metrics_display(
+    mo, loaded_data, holder_metrics, format_currency
+):
+    """Display holder behavior metrics."""
+    if loaded_data is None or holder_metrics is None:
+        return
+
+    mo.md(f"""
+    ## Holder Behavior Analysis
+
+    ### Holder Classification Summary
+
+    | Metric | Value |
+    |--------|-------|
+    | **Total Holders** | {holder_metrics.total_holders:,} |
+    | **Store of Value Holders** | {holder_metrics.sov_count:,} |
+    | **Active Transactors** | {holder_metrics.total_holders - holder_metrics.sov_count:,} |
+    | **SoV Percentage** | {holder_metrics.sov_percentage:.1f}% |
+
+    ### Balance Analysis
+
+    | Metric | Store of Value | Active Transactors |
+    |--------|----------------|-------------------|
+    | **Average Balance** | {format_currency(holder_metrics.avg_balance_sov)} | {format_currency(holder_metrics.avg_balance_active)} |
+
+    ### Holding Period (Store of Value Holders)
+
+    | Metric | Value |
+    |--------|-------|
+    | **Average Holding Period** | {holder_metrics.avg_holding_period_days:.1f} days |
+    | **Median Holding Period** | {holder_metrics.median_holding_period_days:.1f} days |
+    """)
+
+    return
+
+
+@app.cell
+def holder_balance_histogram(mo, alt, pd, loaded_data, Decimal):
+    """Create histogram of holder balances segmented by SoV status."""
+    if loaded_data is None or loaded_data.holders_df.empty:
+        return (None,)
+
+    # Prepare data for histogram
+    df = loaded_data.holders_df.copy()
+
+    # Convert balance to float for visualization
+    df["balance_float"] = df["balance"].apply(
+        lambda x: float(x) if isinstance(x, Decimal) else float(str(x)) if x else 0.0
+    )
+
+    # Create SoV status label
+    df["sov_status"] = df["is_store_of_value"].apply(
+        lambda x: "Store of Value" if x else "Active Transactor"
+    )
+
+    # Filter out zero balances for better visualization
+    df_nonzero = df[df["balance_float"] > 0]
+
+    if df_nonzero.empty:
+        return (None,)
+
+    # Create histogram with log scale for better distribution visibility
+    histogram = alt.Chart(df_nonzero).mark_bar(opacity=0.7).encode(
+        x=alt.X(
+            "balance_float:Q",
+            bin=alt.Bin(maxbins=30),
+            title="Balance (USD)",
+            scale=alt.Scale(type="log")
+        ),
+        y=alt.Y("count():Q", title="Number of Holders"),
+        color=alt.Color(
+            "sov_status:N",
+            scale=alt.Scale(
+                domain=["Store of Value", "Active Transactor"],
+                range=["#F58518", "#4C78A8"]
+            ),
+            legend=alt.Legend(title="Holder Type")
+        ),
+        tooltip=[
+            alt.Tooltip("sov_status:N", title="Holder Type"),
+            alt.Tooltip("count():Q", title="Count"),
+        ]
+    ).properties(
+        title="Distribution of Holder Balances by Classification",
+        width=500,
+        height=300
+    )
+
+    mo.md("### Holder Balance Distribution (Histogram)")
+    return (histogram,)
+
+
+@app.cell
+def display_holder_histogram(mo, loaded_data, histogram):
+    """Display the holder balance histogram."""
+    if loaded_data is None or histogram is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(histogram)
+    except Exception:
+        return histogram
+
+
+@app.cell
+def top_holders_table(mo, loaded_data, top_holders, format_currency):
+    """Display top 10 holders table with classifications."""
+    if loaded_data is None or not top_holders:
+        return
+
+    # Build table rows
+    rows = []
+    for i, holder in enumerate(top_holders, 1):
+        # Mask address for privacy (show first 6 and last 4 chars)
+        addr = holder.address
+        masked_addr = f"{addr[:6]}...{addr[-4:]}" if len(addr) > 10 else addr
+
+        sov_status = "✓ SoV" if holder.is_store_of_value else "Active"
+
+        rows.append(
+            f"| {i} | `{masked_addr}` | {format_currency(holder.balance)} | "
+            f"{holder.stablecoin} | {holder.chain} | {sov_status} |"
+        )
+
+    table_rows = "\n".join(rows)
+
+    mo.md(f"""
+    ### Top 10 Holders by Balance
+
+    | Rank | Address | Balance | Stablecoin | Chain | Classification |
+    |------|---------|---------|------------|-------|----------------|
+    {table_rows}
+
+    **Note:** Addresses are masked for privacy (showing first 6 and last 4 characters).
+    """)
+
+    return
+
+
+@app.cell
+def holder_sov_pie_chart(mo, alt, pd, loaded_data, holder_metrics):
+    """Create pie chart for holder SoV classification distribution."""
+    if loaded_data is None or holder_metrics is None:
+        return (None,)
+
+    if holder_metrics.total_holders == 0:
+        return (None,)
+
+    # Prepare data for pie chart
+    pie_data = pd.DataFrame([
+        {
+            "classification": "Store of Value",
+            "count": holder_metrics.sov_count,
+            "percentage": holder_metrics.sov_percentage,
+        },
+        {
+            "classification": "Active Transactor",
+            "count": holder_metrics.total_holders - holder_metrics.sov_count,
+            "percentage": 100.0 - holder_metrics.sov_percentage,
+        }
+    ])
+
+    # Filter out zero counts
+    pie_data = pie_data[pie_data["count"] > 0]
+
+    if pie_data.empty:
+        return (None,)
+
+    # Create pie chart
+    sov_pie = alt.Chart(pie_data).mark_arc(innerRadius=50).encode(
+        theta=alt.Theta(field="count", type="quantitative"),
+        color=alt.Color(
+            field="classification",
+            type="nominal",
+            scale=alt.Scale(
+                domain=["Store of Value", "Active Transactor"],
+                range=["#F58518", "#4C78A8"]
+            ),
+            legend=alt.Legend(title="Classification")
+        ),
+        tooltip=[
+            alt.Tooltip("classification:N", title="Classification"),
+            alt.Tooltip("count:Q", title="Count", format=","),
+            alt.Tooltip("percentage:Q", title="Percentage", format=".1f"),
+        ]
+    ).properties(
+        title="Holder Classification Distribution",
+        width=300,
+        height=300
+    )
+
+    mo.md("### Holder Classification (Pie Chart)")
+    return (sov_pie,)
+
+
+@app.cell
+def display_sov_pie(mo, loaded_data, holder_metrics, sov_pie):
+    """Display the holder SoV pie chart."""
+    if loaded_data is None or holder_metrics is None or sov_pie is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(sov_pie)
+    except Exception:
+        return sov_pie
 
 
 if __name__ == "__main__":

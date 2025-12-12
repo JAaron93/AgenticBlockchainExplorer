@@ -237,7 +237,7 @@ def analyze_by_stablecoin(
                 raise ValueError(
                     f"Column 'is_store_of_value' must be boolean or numeric, "
                     f"got {holders_df['is_store_of_value'].dtype}"
-+                )
+                )
             for coin in SUPPORTED_STABLECOINS:
                 coin_holders = holders_df[holders_df["stablecoin"] == coin]
                 if len(coin_holders) > 0:
@@ -353,3 +353,189 @@ def calculate_average_transaction_size(
                 result[value] = Decimal("0")
 
     return result
+
+
+# =============================================================================
+# Holder Analysis Functions
+# =============================================================================
+
+
+@dataclass
+class HolderMetrics:
+    """Holder behavior metrics.
+
+    Attributes:
+        total_holders: Total number of holders in the dataset
+        sov_count: Number of holders classified as store_of_value
+        sov_percentage: Percentage of holders that are store_of_value
+        avg_balance_sov: Average balance of store_of_value holders
+        avg_balance_active: Average balance of active (non-SoV) holders
+        avg_holding_period_days: Average holding period for SoV holders
+        median_holding_period_days: Median holding period for SoV holders
+    """
+    total_holders: int
+    sov_count: int
+    sov_percentage: float
+    avg_balance_sov: Decimal
+    avg_balance_active: Decimal
+    avg_holding_period_days: float
+    median_holding_period_days: float
+
+
+@dataclass
+class TopHolder:
+    """Information about a top holder.
+
+    Attributes:
+        address: Wallet address
+        balance: Current token balance
+        stablecoin: Token type (USDC/USDT)
+        chain: Blockchain network
+        is_store_of_value: SoV classification
+    """
+    address: str
+    balance: Decimal
+    stablecoin: str
+    chain: str
+    is_store_of_value: bool
+
+
+def analyze_holders(
+    holders_df: pd.DataFrame,
+    transactions_df: Optional[pd.DataFrame] = None,
+) -> HolderMetrics:
+    """
+    Analyze holder behavior patterns.
+
+    Calculates SoV percentage, average balances, and holding periods.
+
+    Args:
+        holders_df: DataFrame with holder data including 'is_store_of_value',
+                    'balance', and 'holding_period_days' columns
+        transactions_df: Optional DataFrame with transaction data (unused
+                         in current implementation, reserved for future use)
+
+    Returns:
+        HolderMetrics with calculated statistics
+
+    Requirements: 4.1, 4.3
+    """
+    # Validate required columns
+    required_cols = {'is_store_of_value', 'balance'}
+    if not required_cols.issubset(holders_df.columns):
+        missing = required_cols - set(holders_df.columns)
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
+    # Handle empty DataFrame
+    if holders_df.empty:
+        return HolderMetrics(
+            total_holders=0,
+            sov_count=0,
+            sov_percentage=0.0,
+            avg_balance_sov=Decimal("0"),
+            avg_balance_active=Decimal("0"),
+            avg_holding_period_days=0.0,
+            median_holding_period_days=0.0,
+        )
+
+    total_holders = len(holders_df)
+
+    # Count SoV holders - handle both boolean and numeric types
+    sov_mask = holders_df["is_store_of_value"].astype(bool)
+    sov_count = int(sov_mask.sum())
+
+    # Calculate SoV percentage
+    sov_percentage = (sov_count / total_holders * 100.0) if total_holders > 0 else 0.0
+
+    # Calculate average balance for SoV holders
+    sov_holders = holders_df[sov_mask]
+    avg_balance_sov = Decimal("0")
+    if len(sov_holders) > 0:
+        total_sov_balance = Decimal("0")
+        for bal in sov_holders["balance"].dropna():
+            if isinstance(bal, Decimal):
+                total_sov_balance += bal
+            else:
+                total_sov_balance += Decimal(str(bal))
+        avg_balance_sov = total_sov_balance / len(sov_holders)
+
+    # Calculate average balance for active (non-SoV) holders
+    active_holders = holders_df[~sov_mask]
+    avg_balance_active = Decimal("0")
+    if len(active_holders) > 0:
+        total_active_balance = Decimal("0")
+        for bal in active_holders["balance"].dropna():
+            if isinstance(bal, Decimal):
+                total_active_balance += bal
+            else:
+                total_active_balance += Decimal(str(bal))
+        avg_balance_active = total_active_balance / len(active_holders)
+
+    # Calculate holding period statistics for SoV holders
+    avg_holding_period_days = 0.0
+    median_holding_period_days = 0.0
+
+    if "holding_period_days" in holders_df.columns and len(sov_holders) > 0:
+        sov_holding_periods = sov_holders["holding_period_days"].dropna()
+        if len(sov_holding_periods) > 0:
+            avg_holding_period_days = float(sov_holding_periods.mean())
+            median_holding_period_days = float(sov_holding_periods.median())
+
+    return HolderMetrics(
+        total_holders=total_holders,
+        sov_count=sov_count,
+        sov_percentage=sov_percentage,
+        avg_balance_sov=avg_balance_sov,
+        avg_balance_active=avg_balance_active,
+        avg_holding_period_days=avg_holding_period_days,
+        median_holding_period_days=median_holding_period_days,
+    )
+
+
+def get_top_holders(
+    holders_df: pd.DataFrame,
+    n: int = 10,
+) -> list:
+    """
+    Get top N holders by balance globally (across all stablecoins and chains).
+
+    Args:
+        holders_df: DataFrame with holder data
+        n: Number of top holders to return (default: 10)
+
+    Returns:
+        List of TopHolder objects sorted by descending balance
+
+    Requirements: 4.4
+    """
+    # Validate required columns
+    required_cols = {'address', 'balance', 'stablecoin', 'chain', 'is_store_of_value'}
+    if not required_cols.issubset(holders_df.columns):
+        missing = required_cols - set(holders_df.columns)
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
+    if holders_df.empty or n <= 0:
+        return []
+
+    # Convert balance to Decimal for proper sorting if not already
+    df = holders_df.copy()
+    if not df.empty:
+        df["_balance_decimal"] = df["balance"].apply(
+            lambda x: x if isinstance(x, Decimal) else Decimal(str(x)) if x is not None else Decimal("0")
+        )
+
+    # Sort by balance descending and take top N
+    sorted_df = df.sort_values("_balance_decimal", ascending=False).head(n)
+
+    # Convert to list of TopHolder objects
+    top_holders = []
+    for _, row in sorted_df.iterrows():
+        top_holders.append(TopHolder(
+            address=row["address"],
+            balance=row["_balance_decimal"],
+            stablecoin=row["stablecoin"],
+            chain=row["chain"],
+            is_store_of_value=bool(row["is_store_of_value"]),
+        ))
+
+    return top_holders

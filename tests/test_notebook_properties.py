@@ -509,3 +509,133 @@ class TestStablecoinComparison:
                     f"({comparison.by_stablecoin[coin].avg_transaction_size}) "
                     f"!= expected ({expected_coin_avg})"
                 )
+
+
+class TestHolderAnalysis:
+    """Tests for holder behavior analysis functions."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(holders=st.lists(valid_holder(), min_size=0, max_size=50))
+    def test_property_6_holder_classification_consistency(self, holders):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 6: Holder classification consistency**
+
+        For any holders DataFrame, the count of is_store_of_value=True plus
+        is_store_of_value=False SHALL equal total holder count.
+
+        **Validates: Requirements 4.1**
+        """
+        import pandas as pd
+        from stablecoin_analysis_functions import analyze_holders
+
+        # Convert holders to DataFrame
+        if not holders:
+            df = pd.DataFrame(columns=[
+                "address", "balance", "stablecoin", "chain",
+                "first_seen", "last_activity", "is_store_of_value",
+                "source_explorer", "holding_period_days"
+            ])
+        else:
+            df = pd.DataFrame(holders)
+            # Convert balance strings to Decimal
+            df["balance"] = df["balance"].apply(Decimal)
+            # Add holding_period_days if not present
+            if "holding_period_days" not in df.columns:
+                df["holding_period_days"] = 0
+
+        total_holders = len(df)
+
+        # Count SoV and non-SoV holders directly
+        if not df.empty:
+            sov_true_count = df["is_store_of_value"].sum()
+            sov_false_count = (~df["is_store_of_value"]).sum()
+        else:
+            sov_true_count = 0
+            sov_false_count = 0
+
+        # Verify counts add up to total
+        assert sov_true_count + sov_false_count == total_holders, (
+            f"SoV True ({sov_true_count}) + SoV False ({sov_false_count}) "
+            f"!= total holders ({total_holders})"
+        )
+
+        # Verify via analyze_holders function
+        metrics = analyze_holders(df)
+        assert metrics.total_holders == total_holders, (
+            f"analyze_holders total ({metrics.total_holders}) "
+            f"!= expected ({total_holders})"
+        )
+        assert metrics.sov_count == sov_true_count, (
+            f"analyze_holders sov_count ({metrics.sov_count}) "
+            f"!= expected ({sov_true_count})"
+        )
+
+        # Verify percentage calculation
+        if total_holders > 0:
+            expected_pct = sov_true_count / total_holders * 100.0
+            assert abs(metrics.sov_percentage - expected_pct) < 0.01, (
+                f"SoV percentage ({metrics.sov_percentage}) "
+                f"!= expected ({expected_pct})"
+            )
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        holders=st.lists(valid_holder(), min_size=0, max_size=50),
+        n=st.integers(min_value=1, max_value=20)
+    )
+    def test_property_7_top_n_ordering_correctness(self, holders, n):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 7: Top-N ordering correctness**
+
+        For any holders DataFrame and N <= total holders, the top N holders
+        by balance SHALL be sorted in descending order by balance.
+
+        **Validates: Requirements 4.4**
+        """
+        import pandas as pd
+        from stablecoin_analysis_functions import get_top_holders
+
+        # Convert holders to DataFrame
+        if not holders:
+            df = pd.DataFrame(columns=[
+                "address", "balance", "stablecoin", "chain",
+                "first_seen", "last_activity", "is_store_of_value",
+                "source_explorer"
+            ])
+        else:
+            df = pd.DataFrame(holders)
+            # Convert balance strings to Decimal
+            df["balance"] = df["balance"].apply(Decimal)
+
+        # Get top N holders
+        top_holders = get_top_holders(df, n=n)
+
+        # Verify the result count
+        expected_count = min(n, len(df))
+        assert len(top_holders) == expected_count, (
+            f"Expected {expected_count} top holders, got {len(top_holders)}"
+        )
+
+        # Verify descending order by balance
+        if len(top_holders) > 1:
+            for i in range(len(top_holders) - 1):
+                assert top_holders[i].balance >= top_holders[i + 1].balance, (
+                    f"Top holders not in descending order: "
+                    f"holder[{i}].balance ({top_holders[i].balance}) < "
+                    f"holder[{i+1}].balance ({top_holders[i + 1].balance})"
+                )
+
+        # Verify that returned holders have the highest balances
+        if not df.empty and len(top_holders) > 0:
+            # Get all balances sorted descending
+            all_balances = sorted(df["balance"].tolist(), reverse=True)
+            top_n_balances = all_balances[:expected_count]
+
+            # The returned balances should match the top N balances
+            returned_balances = sorted(
+                [h.balance for h in top_holders], reverse=True
+            )
+            assert returned_balances == top_n_balances, (
+                f"Returned balances {returned_balances} don't match "
+                f"expected top {expected_count} balances {top_n_balances}"
+            )
