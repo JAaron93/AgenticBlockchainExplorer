@@ -8,7 +8,27 @@ from api.security import (
     init_csrf_protection,
     get_cors_config,
     get_csrf_protection,
+    reset_cors_config,
+    reset_csrf_protection,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_security_globals():
+    """Reset global security state before and after each test.
+
+    This prevents cross-test pollution from tests that modify
+    the global CORS and CSRF configuration.
+    """
+    # Reset before test
+    reset_cors_config()
+    reset_csrf_protection()
+
+    yield
+
+    # Reset after test
+    reset_cors_config()
+    reset_csrf_protection()
 
 
 class TestCORSConfig:

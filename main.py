@@ -252,7 +252,7 @@ app.include_router(results_router)
 
 @app.get("/")
 async def root():
-    """Root endpoint - health check."""
+    """Root endpoint - basic service info."""
     return {
         "status": "ok",
         "service": "Blockchain Stablecoin Explorer",
@@ -262,8 +262,79 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
+    """Basic health check endpoint for load balancers."""
     return {"status": "healthy"}
+
+
+@app.get("/health/ready")
+async def readiness_check():
+    """Readiness check - verifies all dependencies are available.
+    
+    Checks:
+    - Database connectivity
+    - Auth0 configuration
+    - Configuration loaded
+    """
+    from core.database import get_database
+    from core.auth0_manager import get_auth0_manager
+    from sqlalchemy import text
+    
+    checks = {
+        "database": "unknown",
+        "auth0": "unknown",
+        "config": "unknown",
+    }
+    all_healthy = True
+    
+    # Check configuration
+    try:
+        get_config()  # Verify config is loaded
+        checks["config"] = "healthy"
+    except Exception as e:
+        checks["config"] = f"unhealthy: {str(e)}"
+        all_healthy = False
+    
+    # Check database connectivity
+    try:
+        db = get_database()
+        async with db.session() as session:
+            await session.execute(text("SELECT 1"))
+        checks["database"] = "healthy"
+    except Exception as e:
+        checks["database"] = f"unhealthy: {str(e)}"
+        all_healthy = False
+    
+    # Check Auth0 configuration
+    try:
+        auth0 = get_auth0_manager()
+        if auth0.domain and auth0.client_id:
+            checks["auth0"] = "healthy"
+        else:
+            checks["auth0"] = "unhealthy: missing configuration"
+            all_healthy = False
+    except Exception as e:
+        checks["auth0"] = f"unhealthy: {str(e)}"
+        all_healthy = False
+    
+    status_code = 200 if all_healthy else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "healthy" if all_healthy else "unhealthy",
+            "checks": checks,
+            "version": "1.0.0",
+        }
+    )
+
+
+@app.get("/health/live")
+async def liveness_check():
+    """Liveness check - verifies the application is running.
+    
+    This is a simple check that always returns healthy if the app is running.
+    Used by Kubernetes/container orchestrators to detect if the app needs restart.
+    """
+    return {"status": "alive"}
 
 
 if __name__ == "__main__":

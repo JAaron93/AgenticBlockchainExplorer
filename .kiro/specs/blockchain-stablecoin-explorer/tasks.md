@@ -179,15 +179,15 @@
     - Implement CSRF protection for state-changing endpoints
     - _Requirements: 4.1_
 
-- [ ] 14. Create startup script and entry point
-  - [ ] 14.1 Create main application entry point
+- [x] 14. Create startup script and entry point
+  - [x] 14.1 Create main application entry point
     - Write main.py to initialize FastAPI app
     - Set up database connection on startup
     - Configure Auth0 integration
     - Add health check endpoint
     - _Requirements: 5.1, 5.2_
   
-  - [ ] 14.2 Add CLI for standalone agent execution
+  - [x] 14.2 Add CLI for standalone agent execution
     - Create CLI script for running agent without web interface (optional for testing)
     - Accept configuration file path as argument
     - Output results to console and file

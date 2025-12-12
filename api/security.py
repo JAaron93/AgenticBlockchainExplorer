@@ -10,9 +10,9 @@ import secrets
 import time
 from typing import Callable, Dict, List, Optional, Set
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +211,15 @@ def get_cors_config() -> Optional[CORSConfig]:
     return _cors_config
 
 
+def reset_cors_config() -> None:
+    """Reset the global CORS configuration to None.
+
+    Used for testing to ensure clean state between tests.
+    """
+    global _cors_config
+    _cors_config = None
+
+
 class CSRFProtection:
     """CSRF protection using double-submit cookie pattern.
     
@@ -336,6 +345,15 @@ def get_csrf_protection() -> Optional[CSRFProtection]:
     return _csrf_protection
 
 
+def reset_csrf_protection() -> None:
+    """Reset the global CSRF protection to None.
+
+    Used for testing to ensure clean state between tests.
+    """
+    global _csrf_protection
+    _csrf_protection = None
+
+
 class CSRFMiddleware(BaseHTTPMiddleware):
     """Middleware for CSRF protection.
     
@@ -367,25 +385,25 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         if csrf.should_protect(request):
             # Get token from header
             token = request.headers.get(self.CSRF_HEADER)
-            
+
             if not token:
                 logger.warning(
                     f"Missing CSRF token for {request.method} {request.url.path}",
                     extra={"path": request.url.path, "method": request.method}
                 )
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="CSRF token missing",
+                    content={"detail": "CSRF token missing"},
                 )
-            
+
             if not csrf.validate_token(token):
                 logger.warning(
                     f"Invalid CSRF token for {request.method} {request.url.path}",
                     extra={"path": request.url.path, "method": request.method}
                 )
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Invalid CSRF token",
+                    content={"detail": "Invalid CSRF token"},
                 )
         
         response = await call_next(request)
