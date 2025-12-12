@@ -44,7 +44,8 @@
     "logout_url": "http://localhost:8000"
   },
   "database": {
-    "url": "postgresql://<USER>:<PASSWORD>@localhost:5432/stablecoin_explorer",
+    "_comment": "Set DATABASE_URL in your .env file - see .env.example for format",
+    "url": "${DATABASE_URL}",
     "pool_size": 10,
     "max_overflow": 20
   },

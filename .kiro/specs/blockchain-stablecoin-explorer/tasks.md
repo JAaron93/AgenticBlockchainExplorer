@@ -20,14 +20,14 @@
     - Add Auth0 configuration section
     - _Requirements: 5.1, 5.2_
 
-- [ ] 3. Set up database layer
-  - [ ] 3.1 Create database models and schema
+- [x] 3. Set up database layer
+  - [x] 3.1 Create database models and schema
     - Define SQLAlchemy models for users, agent_runs, run_results, audit_logs tables
     - Write Alembic migration scripts for initial schema
     - Implement database connection management with connection pooling
     - _Requirements: 4.2, 4.4_
   
-  - [ ] 3.2 Implement database manager
+  - [x] 3.2 Implement database manager
     - Code DatabaseManager class with async methods for CRUD operations
     - Implement create_run, update_run_status, save_run_result methods
     - Add get_user_runs, get_run_details, log_user_action methods

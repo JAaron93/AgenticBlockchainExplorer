@@ -1,24 +1,25 @@
 {
   "_comment": "PRODUCTION CONFIGURATION - Review all security-sensitive settings before deployment",
+  "_api_keys_comment": "All *_API_KEY values must be set via environment variables (ETHERSCAN_API_KEY, BSCSCAN_API_KEY, POLYGONSCAN_API_KEY) - never commit real API keys to source control",
   "explorers": [
     {
       "name": "etherscan",
       "base_url": "https://api.etherscan.io/api",
-      "api_key": "YOUR_ETHERSCAN_API_KEY",
+      "api_key": "${ETHERSCAN_API_KEY}",
       "type": "api",
       "chain": "ethereum"
     },
     {
       "name": "bscscan",
       "base_url": "https://api.bscscan.com/api",
-      "api_key": "YOUR_BSCSCAN_API_KEY",
+      "api_key": "${BSCSCAN_API_KEY}",
       "type": "api",
       "chain": "bsc"
     },
     {
       "name": "polygonscan",
       "base_url": "https://api.polygonscan.com/api",
-      "api_key": "YOUR_POLYGONSCAN_API_KEY",
+      "api_key": "${POLYGONSCAN_API_KEY}",
       "type": "api",
       "chain": "polygon"
     }
@@ -36,24 +37,27 @@
     }
   },
   "auth0": {
-    "domain": "your-tenant.auth0.com",
-    "client_id": "your_auth0_client_id",
-    "client_secret": "your_auth0_client_secret",
-    "audience": "https://your-api-identifier",
-    "callback_url": "https://your-production-domain.com/callback",
-    "logout_url": "https://your-production-domain.com"
+    "_comment": "All Auth0 credentials must be set via environment variables - do not store secrets in config files",
+    "domain": "${AUTH0_DOMAIN}",
+    "client_id": "${AUTH0_CLIENT_ID}",
+    "client_secret": "${AUTH0_CLIENT_SECRET}",
+    "audience": "${AUTH0_AUDIENCE}",
+    "callback_url": "${AUTH0_CALLBACK_URL}",
+    "logout_url": "${AUTH0_LOGOUT_URL}"
   },
   "database": {
-    "url": "postgresql://<USER>:<PASSWORD>@<DB_HOST>:5432/stablecoin_explorer",
+    "_comment": "DATABASE_URL must be set via environment variable - do not store credentials in config files",
+    "url": "${DATABASE_URL}",
     "pool_size": 20,
     "max_overflow": 40
   },
   "app": {
+    "_comment": "SECRET_KEY must be set via environment variable - generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\"",
     "env": "production",
     "host": "0.0.0.0",
     "port": 8000,
     "debug": false,
-    "secret_key": "<GENERATE_STRONG_SECRET_KEY_AT_LEAST_32_CHARS>"
+    "secret_key": "${SECRET_KEY}"
   },
   "output": {
     "directory": "./output",

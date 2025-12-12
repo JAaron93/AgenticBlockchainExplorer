@@ -1,7 +1,42 @@
 #!/usr/bin/env python3
 """Example script demonstrating configuration usage."""
 
+from urllib.parse import urlparse
 from config import ConfigurationManager
+
+
+def redact_database_url(url: str) -> str:
+    """Redact sensitive parts of database URL (password)."""
+    try:
+        parsed = urlparse(url)
+        if parsed.username and parsed.password:
+            # Show username but mask password
+            redacted_netloc = f"{parsed.username}:****@{parsed.hostname}"
+            if parsed.port:
+                redacted_netloc += f":{parsed.port}"
+        elif parsed.username:
+            redacted_netloc = f"{parsed.username}@{parsed.hostname}"
+            if parsed.port:
+                redacted_netloc += f":{parsed.port}"
+        else:
+            redacted_netloc = parsed.netloc
+        
+        # Redact query and fragment if present
+        redacted_url = f"{parsed.scheme}://{redacted_netloc}{parsed.path}"
+        if parsed.query:
+            redacted_url += "?<redacted>"
+        if parsed.fragment:
+            redacted_url += "#<redacted>"
+        return redacted_url
+    except Exception:
+        return "<redacted>"
+
+def mask_client_id(client_id: str) -> str:
+    """Mask middle portion of client ID, showing first and last 4 chars."""
+    if len(client_id) <= 8:
+        return "****"
+    return f"{client_id[:4]}{'*' * (len(client_id) - 8)}{client_id[-4:]}"
+
 
 def main():
     """Demonstrate configuration loading and usage."""
@@ -23,16 +58,16 @@ def main():
         print(f"   Port: {config.app.port}")
         print(f"   Debug: {config.app.debug}")
         
-        # Display database settings
+        # Display database settings (sensitive fields redacted)
         print("\n3. Database Settings:")
-        print(f"   URL: {config.database.url}")
+        print(f"   URL: {redact_database_url(config.database.url)}")
         print(f"   Pool Size: {config.database.pool_size}")
         print(f"   Max Overflow: {config.database.max_overflow}")
         
-        # Display Auth0 settings
+        # Display Auth0 settings (sensitive fields redacted)
         print("\n4. Auth0 Settings:")
         print(f"   Domain: {config.auth0.domain}")
-        print(f"   Client ID: {config.auth0.client_id}")
+        print(f"   Client ID: {mask_client_id(config.auth0.client_id)}")
         print(f"   Audience: {config.auth0.audience}")
         
         # Display explorer configurations

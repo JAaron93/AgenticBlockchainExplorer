@@ -42,7 +42,7 @@ cp config.example.production.json config.json
 #### Required Changes for Production
 
 1. **App Environment & Debug Mode**
-   ```json
+   ```jsonc
    "app": {
      "env": "production",        // MUST be "production"
      "debug": false              // MUST be false in production
@@ -54,19 +54,26 @@ cp config.example.production.json config.json
 2. **Secret Key**
    ```json
    "app": {
-     "secret_key": "<GENERATE_STRONG_SECRET_KEY>"
+     "secret_key": "${SECRET_KEY}"
    }
    ```
    - **Risk**: Weak or default secret keys compromise session security
-   - **Action**: Generate a cryptographically secure random key (minimum 32 characters)
+   - **Action**: Always use the `SECRET_KEY` environment variable in production
+   - **Required**: The application will fail to start if `SECRET_KEY` is not set when using the placeholder
+   - **Requirements**: Must be cryptographically generated with at least 32 bytes (43+ characters when base64-encoded)
    - **How to generate**:
      ```bash
+     # Generate a secure 32-byte (256-bit) secret key
      python -c "import secrets; print(secrets.token_urlsafe(32))"
+     
+     # Alternative using OpenSSL
+     openssl rand -base64 32
      ```
    - **Never** commit the production secret key to version control
+   - **Secure provisioning**: Use environment variables, AWS Secrets Manager, HashiCorp Vault, or similar
 
 3. **Cookie Security**
-   ```json
+   ```jsonc
    "session": {
      "cookie_secure": true,      // MUST be true (requires HTTPS)
      "cookie_httponly": true,    // Keep as true
@@ -77,7 +84,7 @@ cp config.example.production.json config.json
    - **Action**: Set `cookie_secure: true` (requires HTTPS), use `cookie_samesite: "strict"`
 
 4. **CORS Origins**
-   ```json
+   ```jsonc
    "cors": {
      "allowed_origins": [
        "https://your-production-domain.com"  // Only your actual domain(s)
@@ -88,25 +95,34 @@ cp config.example.production.json config.json
    - **Action**: Replace localhost URLs with your actual production domain(s)
    - **Never** use `"*"` or include development URLs in production
 
-5. **Auth0 Callback URLs**
+5. **Auth0 Configuration**
    ```json
    "auth0": {
-     "callback_url": "https://your-production-domain.com/callback",
-     "logout_url": "https://your-production-domain.com"
+     "domain": "${AUTH0_DOMAIN}",
+     "client_id": "${AUTH0_CLIENT_ID}",
+     "client_secret": "${AUTH0_CLIENT_SECRET}",
+     "audience": "${AUTH0_AUDIENCE}",
+     "callback_url": "${AUTH0_CALLBACK_URL}",
+     "logout_url": "${AUTH0_LOGOUT_URL}"
    }
    ```
-   - **Risk**: Incorrect callback URLs can break authentication or create security vulnerabilities
-   - **Action**: Use HTTPS URLs matching your production domain
+   - **Risk**: Storing Auth0 credentials in config files can lead to accidental exposure
+   - **Action**: Always use environment variables for all Auth0 settings
+   - **Required**: The application will fail to start if any Auth0 environment variable is missing
+   - **Never** commit Auth0 credentials (especially `client_secret`) to version control
 
 6. **Database Credentials**
    ```json
    "database": {
-     "url": "postgresql://<USER>:<PASSWORD>@<DB_HOST>:5432/stablecoin_explorer"
+     "url": "${DATABASE_URL}"
    }
    ```
-   - **Risk**: Weak or default credentials compromise database security
-   - **Action**: Use strong, unique credentials; consider using environment variables
-   - **Best Practice**: Store `DATABASE_URL` in environment variables, not in config files
+   - **Risk**: Storing credentials in config files can lead to accidental exposure
+   - **Action**: Always use the `DATABASE_URL` environment variable
+   - **Required**: The application will fail to start if `DATABASE_URL` is not set
+   - **Format**: `postgresql://username:password@hostname:port/database_name`
+   - **Example**: `postgresql://app_user:secure_password@db.example.com:5432/stablecoin_explorer`
+   - **Never** commit database credentials to version control
 
 7. **Logging Level**
    ```json
@@ -125,9 +141,22 @@ Instead of storing secrets in `config.json`, use environment variables:
 
 ```bash
 # .env (DO NOT commit to version control)
-DATABASE_URL=postgresql://prod_user:strong_password@prod-db:5432/stablecoin_explorer
-SECRET_KEY=your_generated_secret_key_here
+
+# Auth0 Configuration (ALL REQUIRED)
+AUTH0_DOMAIN=your-tenant.auth0.com
+AUTH0_CLIENT_ID=your_auth0_client_id
 AUTH0_CLIENT_SECRET=your_auth0_client_secret
+AUTH0_AUDIENCE=https://your-api-identifier
+AUTH0_CALLBACK_URL=https://your-production-domain.com/callback
+AUTH0_LOGOUT_URL=https://your-production-domain.com
+
+# Database (REQUIRED)
+DATABASE_URL=postgresql://prod_user:strong_password@prod-db:5432/stablecoin_explorer
+
+# Application Secret (REQUIRED)
+SECRET_KEY=your_generated_secret_key_here
+
+# API Keys
 ETHERSCAN_API_KEY=your_etherscan_api_key
 BSCSCAN_API_KEY=your_bscscan_api_key
 POLYGONSCAN_API_KEY=your_polygonscan_api_key
@@ -135,16 +164,78 @@ POLYGONSCAN_API_KEY=your_polygonscan_api_key
 
 Environment variables automatically override config file values.
 
+#### Required Auth0 Environment Variables
+
+All Auth0 configuration **must** be provided via environment variables. The application will fail to start if any are missing.
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `AUTH0_DOMAIN` | Your Auth0 tenant domain | `your-tenant.auth0.com` |
+| `AUTH0_CLIENT_ID` | Application client ID from Auth0 | `abc123def456...` |
+| `AUTH0_CLIENT_SECRET` | Application client secret from Auth0 | `xyz789...` |
+| `AUTH0_AUDIENCE` | API identifier/audience | `https://api.example.com` |
+| `AUTH0_CALLBACK_URL` | OAuth callback URL (must match Auth0 config) | `https://app.example.com/callback` |
+| `AUTH0_LOGOUT_URL` | Post-logout redirect URL | `https://app.example.com` |
+
+**Important:**
+- Get these values from your Auth0 Dashboard → Applications → Your App
+- `AUTH0_CLIENT_SECRET` is highly sensitive - never commit it to version control
+- Callback and logout URLs must use HTTPS in production
+- URLs must be registered in your Auth0 application settings
+
+#### DATABASE_URL Format
+
+The `DATABASE_URL` environment variable is **required** and must follow this format:
+
+```
+postgresql://username:password@hostname:port/database_name
+```
+
+**Components:**
+- `username`: PostgreSQL user with appropriate permissions
+- `password`: User's password (URL-encode special characters)
+- `hostname`: Database server hostname or IP address
+- `port`: PostgreSQL port (default: 5432)
+- `database_name`: Name of the database
+
+**Examples:**
+```bash
+# Local development
+DATABASE_URL=postgresql://dev_user:dev_pass@localhost:5432/stablecoin_dev
+
+# Production with standard port
+DATABASE_URL=postgresql://app_user:secure_password@db.example.com:5432/stablecoin_explorer
+
+# With special characters in password (URL-encoded)
+DATABASE_URL=postgresql://user:p%40ssw%23rd@db.example.com:5432/mydb
+
+# AWS RDS example
+DATABASE_URL=postgresql://admin:password@mydb.abc123.us-east-1.rds.amazonaws.com:5432/stablecoin
+```
+
+**Special Character Encoding:**
+If your password contains special characters, URL-encode them:
+- `@` → `%40`
+- `#` → `%23`
+- `/` → `%2F`
+- `:` → `%3A`
+- `%` → `%25`
+
 #### Security Checklist Before Deployment
 
 - [ ] `app.env` is set to `"production"`
 - [ ] `app.debug` is set to `false`
-- [ ] `app.secret_key` is a strong, randomly generated value (not the example)
+- [ ] `SECRET_KEY` environment variable is set with a cryptographically secure value (32+ bytes)
 - [ ] `session.cookie_secure` is set to `true`
 - [ ] `session.cookie_samesite` is set to `"strict"`
 - [ ] `cors.allowed_origins` contains only your production domain(s)
-- [ ] `auth0.callback_url` and `auth0.logout_url` use HTTPS and your production domain
-- [ ] `database.url` uses strong credentials (preferably from environment variables)
+- [ ] `AUTH0_DOMAIN` environment variable is set
+- [ ] `AUTH0_CLIENT_ID` environment variable is set
+- [ ] `AUTH0_CLIENT_SECRET` environment variable is set (never in config files!)
+- [ ] `AUTH0_AUDIENCE` environment variable is set
+- [ ] `AUTH0_CALLBACK_URL` environment variable uses HTTPS and your production domain
+- [ ] `AUTH0_LOGOUT_URL` environment variable uses HTTPS and your production domain
+- [ ] `DATABASE_URL` environment variable is set with strong credentials
 - [ ] `logging.level` is set to `"WARNING"` or `"ERROR"`
 - [ ] All API keys are valid and not placeholder values
 - [ ] `.env` file is added to `.gitignore`
@@ -322,20 +413,23 @@ except ValidationError as e:
 
 ## Environment Variable Mapping
 
-| Environment Variable | Configuration Path |
-|---------------------|-------------------|
-| `AUTH0_DOMAIN` | `auth0.domain` |
-| `AUTH0_CLIENT_ID` | `auth0.client_id` |
-| `AUTH0_CLIENT_SECRET` | `auth0.client_secret` |
-| `DATABASE_URL` | `database.url` |
-| `APP_ENV` | `app.env` |
-| `APP_PORT` | `app.port` |
-| `SECRET_KEY` | `app.secret_key` |
-| `ETHERSCAN_API_KEY` | `explorers[name=etherscan].api_key` |
-| `BSCSCAN_API_KEY` | `explorers[name=bscscan].api_key` |
-| `POLYGONSCAN_API_KEY` | `explorers[name=polygonscan].api_key` |
-| `OUTPUT_DIRECTORY` | `output.directory` |
-| `MAX_RECORDS_PER_EXPLORER` | `output.max_records_per_explorer` |
+| Environment Variable | Configuration Path | Required |
+|---------------------|-------------------|----------|
+| `AUTH0_DOMAIN` | `auth0.domain` | **Yes** |
+| `AUTH0_CLIENT_ID` | `auth0.client_id` | **Yes** |
+| `AUTH0_CLIENT_SECRET` | `auth0.client_secret` | **Yes** |
+| `AUTH0_AUDIENCE` | `auth0.audience` | **Yes** |
+| `AUTH0_CALLBACK_URL` | `auth0.callback_url` | **Yes** |
+| `AUTH0_LOGOUT_URL` | `auth0.logout_url` | **Yes** |
+| `DATABASE_URL` | `database.url` | **Yes** |
+| `SECRET_KEY` | `app.secret_key` | **Yes** (production) |
+| `APP_ENV` | `app.env` | No |
+| `APP_PORT` | `app.port` | No |
+| `ETHERSCAN_API_KEY` | `explorers[name=etherscan].api_key` | No |
+| `BSCSCAN_API_KEY` | `explorers[name=bscscan].api_key` | No |
+| `POLYGONSCAN_API_KEY` | `explorers[name=polygonscan].api_key` | No |
+| `OUTPUT_DIRECTORY` | `output.directory` | No |
+| `MAX_RECORDS_PER_EXPLORER` | `output.max_records_per_explorer` | No |
 
 See `.env.example` for a complete list of environment variables.
 

@@ -1,9 +1,10 @@
 """Pydantic models for configuration schema validation."""
 
 import logging
-from typing import Dict, List, Literal
-from pydantic import BaseModel, Field, field_validator, HttpUrl
+from typing import ClassVar, Dict, List, Literal
+from pydantic import BaseModel, Field, field_validator, model_validator, HttpUrl, ValidationInfo
 from enum import Enum
+from eth_utils import is_address, to_checksum_address
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,8 @@ class ExplorerType(str, Enum):
 
 class ExplorerConfig(BaseModel):
     """Configuration for a blockchain explorer."""
+
+    ALLOWED_CHAINS: ClassVar[List[str]] = ["ethereum", "bsc", "polygon"]
     
     name: str = Field(..., description="Name of the explorer (e.g., 'etherscan')")
     base_url: HttpUrl = Field(..., description="Base URL for the explorer API")
@@ -43,10 +46,9 @@ class ExplorerConfig(BaseModel):
     @classmethod
     def validate_chain(cls, v: str) -> str:
         """Validate chain name."""
-        allowed_chains = ["ethereum", "bsc", "polygon"]
         chain_lower = v.lower().strip()
-        if chain_lower not in allowed_chains:
-            raise ValueError(f"Chain must be one of {allowed_chains}, got '{v}'")
+        if chain_lower not in cls.ALLOWED_CHAINS:
+            raise ValueError(f"Chain must be one of {cls.ALLOWED_CHAINS}, got '{v}'")
         return chain_lower
 
 
@@ -60,26 +62,18 @@ class StablecoinConfig(BaseModel):
     @field_validator("ethereum", "bsc", "polygon")
     @classmethod
     def validate_address(cls, v: str) -> str:
-        """Validate Ethereum address format."""
+        """Validate Ethereum address format with EIP-55 checksum."""
         if not v or not v.strip():
             raise ValueError("Contract address cannot be empty")
         
         address = v.strip()
         
-        # Basic Ethereum address validation
-        if not address.startswith("0x"):
-            raise ValueError(f"Address must start with '0x', got '{address}'")
+        # Validate address using eth_utils
+        if not is_address(address):
+            raise ValueError(f"Invalid Ethereum address: '{address}'")
         
-        if len(address) != 42:
-            raise ValueError(f"Address must be 42 characters long (including '0x'), got {len(address)}")
-        
-        # Check if hex characters
-        try:
-            int(address[2:], 16)
-        except ValueError:
-            raise ValueError(f"Address must contain valid hexadecimal characters, got '{address}'")
-        
-        return address
+        # Return checksummed address for normalization
+        return to_checksum_address(address)
 
 
 class Auth0Config(BaseModel):
@@ -185,6 +179,17 @@ class AppConfig(BaseModel):
     debug: bool = Field(default=False, description="Debug mode")
     secret_key: str = Field(..., description="Secret key for session management")
     
+    @field_validator("debug")
+    @classmethod
+    def validate_debug(cls, v: bool, info: ValidationInfo) -> bool:
+        """Warn if debug mode is enabled in production."""
+        if v and info.data.get("env") == "production":
+            logger.warning(
+                "Debug mode is enabled in production environment. "
+                "This could expose sensitive information and should be disabled."
+            )
+        return v
+    
     @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
@@ -279,11 +284,6 @@ class Config(BaseModel):
         if len(names) != len(set(names)):
             raise ValueError("Explorer names must be unique")
         
-        # Check for duplicate chains
-        chains = [explorer.chain for explorer in v]
-        if len(chains) != len(set(chains)):
-            raise ValueError("Each chain can only have one explorer configured")
-        
         return v
     
     @field_validator("stablecoins")
@@ -301,6 +301,11 @@ class Config(BaseModel):
         
         return v
     
+    # Note: Explorer-stablecoin chain validation is enforced by StablecoinConfig
+    # requiring all chain fields (ethereum, bsc, polygon) to be present.
+    # No additional model_validator needed since Pydantic's required-field
+    # validation already guarantees all chains have addresses.
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -308,28 +313,28 @@ class Config(BaseModel):
                     {
                         "name": "etherscan",
                         "base_url": "https://api.etherscan.io/api",
-                        "api_key": "YOUR_API_KEY",
+                        "api_key": "FAKE_API_KEY_DO_NOT_USE",
                         "type": "api",
                         "chain": "ethereum"
                     }
                 ],
                 "stablecoins": {
                     "USDC": {
-                        "ethereum": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                        "bsc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
-                        "polygon": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+                        "ethereum": "0x0000000000000000000000000000000000000000",
+                        "bsc": "0x0000000000000000000000000000000000000000",
+                        "polygon": "0x0000000000000000000000000000000000000000"
                     }
                 },
                 "auth0": {
-                    "domain": "your-tenant.auth0.com",
-                    "client_id": "your_client_id",
-                    "client_secret": "your_client_secret",
-                    "audience": "https://your-api-identifier",
+                    "domain": "example.invalid",
+                    "client_id": "REPLACE_WITH_AUTH0_CLIENT_ID",
+                    "client_secret": "REPLACE_WITH_AUTH0_CLIENT_SECRET",
+                    "audience": "https://example.invalid/api",
                     "callback_url": "http://localhost:8000/callback",
                     "logout_url": "http://localhost:8000"
                 },
                 "database": {
-                    "url": "postgresql://user:password@localhost:5432/stablecoin_explorer",
+                    "url": "postgresql://user:pass@localhost:5432/REPLACE_DB",
                     "pool_size": 10,
                     "max_overflow": 20
                 },
@@ -338,7 +343,7 @@ class Config(BaseModel):
                     "host": "0.0.0.0",
                     "port": 8000,
                     "debug": True,
-                    "secret_key": "your_secret_key_at_least_32_characters_long"
+                    "secret_key": "INVALID_SECRET_REPLACE_WITH_SECURE_32_CHAR_KEY"
                 }
             }
         }
