@@ -1,0 +1,79 @@
+{
+  "metadata": {
+    "run_id": "test-run-123",
+    "collection_timestamp": "2025-12-12T07:58:15.416420+00:00",
+    "agent_version": "1.0.0",
+    "explorers_queried": [
+      "etherscan"
+    ],
+    "total_records": 3,
+    "user_id": "auth0|test"
+  },
+  "summary": {
+    "by_stablecoin": {
+      "USDC": {
+        "total_transactions": 2,
+        "total_volume": "1500",
+        "unique_addresses": 4
+      },
+      "USDT": {
+        "total_transactions": 1,
+        "total_volume": "2000",
+        "unique_addresses": 2
+      }
+    },
+    "by_activity_type": {
+      "transaction": 3
+    },
+    "by_chain": {
+      "ethereum": 1,
+      "bsc": 1,
+      "polygon": 1
+    }
+  },
+  "transactions": [
+    {
+      "transaction_hash": "0xeth1",
+      "block_number": 18500000,
+      "timestamp": "2025-12-12T07:58:15.414701+00:00",
+      "from_address": "0x1111111111111111111111111111111111111111",
+      "to_address": "0x2222222222222222222222222222222222222222",
+      "amount": "1000",
+      "stablecoin": "USDC",
+      "chain": "ethereum",
+      "activity_type": "transaction",
+      "source_explorer": "etherscan",
+      "gas_used": null,
+      "gas_price": null
+    },
+    {
+      "transaction_hash": "0xbsc1",
+      "block_number": 30000000,
+      "timestamp": "2025-12-12T07:58:15.414701+00:00",
+      "from_address": "0x3333333333333333333333333333333333333333",
+      "to_address": "0x4444444444444444444444444444444444444444",
+      "amount": "2000",
+      "stablecoin": "USDT",
+      "chain": "bsc",
+      "activity_type": "transaction",
+      "source_explorer": "bscscan",
+      "gas_used": null,
+      "gas_price": null
+    },
+    {
+      "transaction_hash": "0xpoly1",
+      "block_number": 45000000,
+      "timestamp": "2025-12-12T07:58:15.414701+00:00",
+      "from_address": "0x5555555555555555555555555555555555555555",
+      "to_address": "0x6666666666666666666666666666666666666666",
+      "amount": "500",
+      "stablecoin": "USDC",
+      "chain": "polygon",
+      "activity_type": "transaction",
+      "source_explorer": "polygonscan",
+      "gas_used": null,
+      "gas_price": null
+    }
+  ],
+  "holders": []
+}

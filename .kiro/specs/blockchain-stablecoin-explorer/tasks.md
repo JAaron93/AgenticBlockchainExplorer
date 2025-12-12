@@ -193,22 +193,22 @@
     - Output results to console and file
     - _Requirements: 5.1, 5.2_
 
-- [ ]* 15. Write tests
-  - [ ]* 15.1 Write unit tests for core components
+- [x] 15. Write tests
+  - [x] 15.1 Write unit tests for core components
     - Test configuration validation with valid and invalid configs
     - Test activity classification logic with sample transactions
     - Test data aggregation and deduplication
     - Test Auth0 token validation with mock tokens
     - _Requirements: All_
   
-  - [ ]* 15.2 Write integration tests
+  - [x] 15.2 Write integration tests
     - Test API endpoints with mocked Auth0
     - Test collectors with mock API responses
     - Test database operations with test database
     - Test complete data flow from collection to export
     - _Requirements: All_
   
-  - [ ]* 15.3 Write end-to-end tests
+  - [x] 15.3 Write end-to-end tests
     - Test authentication flow with Auth0 test tenant
     - Test complete agent run from API trigger to result download
     - Test multi-user scenarios and permission enforcement

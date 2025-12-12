@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "run_id": "abc123",
+    "collection_timestamp": "2025-12-12T07:58:15.420756+00:00",
+    "agent_version": "1.0.0",
+    "explorers_queried": [
+      "etherscan"
+    ],
+    "total_records": 1,
+    "user_id": "auth0|test"
+  },
+  "summary": {
+    "by_stablecoin": {
+      "USDC": {
+        "total_transactions": 1,
+        "total_volume": "1000",
+        "unique_addresses": 2
+      }
+    },
+    "by_activity_type": {
+      "transaction": 1
+    },
+    "by_chain": {
+      "ethereum": 1
+    }
+  },
+  "transactions": [
+    {
+      "transaction_hash": "0xeth1",
+      "block_number": 18500000,
+      "timestamp": "2025-12-12T07:58:15.419746+00:00",
+      "from_address": "0x1111111111111111111111111111111111111111",
+      "to_address": "0x2222222222222222222222222222222222222222",
+      "amount": "1000",
+      "stablecoin": "USDC",
+      "chain": "ethereum",
+      "activity_type": "transaction",
+      "source_explorer": "etherscan",
+      "gas_used": null,
+      "gas_price": null
+    }
+  ],
+  "holders": []
+}
