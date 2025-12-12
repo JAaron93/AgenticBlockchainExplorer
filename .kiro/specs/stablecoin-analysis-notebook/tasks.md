@@ -1,0 +1,160 @@
+# Implementation Plan
+
+- [ ] 1. Set up marimo notebook structure and dependencies
+  - [ ] 1.1 Create the marimo notebook file with initial imports and configuration
+    - Create `notebooks/stablecoin_analysis.py` as a marimo notebook
+    - Add imports for marimo, pandas, altair, decimal, dataclasses, pathlib
+    - Configure marimo app with title and description
+    - _Requirements: 1.1_
+  - [ ] 1.2 Update project dependencies
+    - Add marimo, altair, hypothesis to requirements.txt
+    - Verify compatibility with existing dependencies
+    - _Requirements: 1.1_
+
+- [ ] 2. Implement data loading and validation
+  - [ ] 2.1 Create schema validation functions
+    - Implement `validate_schema(data: dict) -> tuple[bool, list[str]]`
+    - Validate metadata, summary, transactions, and holders sections
+    - Return list of validation errors for invalid data
+    - _Requirements: 1.2, 1.4_
+  - [ ] 2.2 Write property test for schema validation round-trip
+    - **Property 1: Schema validation round-trip**
+    - **Validates: Requirements 1.2, 8.2**
+  - [ ] 2.3 Create JSON file loader and DataFrame converter
+    - Implement `load_json_file(file_path: str) -> LoadedData`
+    - Parse JSON and convert transactions/holders to DataFrames
+    - Handle decimal conversion for amount fields
+    - Parse ISO8601 timestamps to datetime objects
+    - _Requirements: 1.2, 1.3_
+  - [ ] 2.4 Create file selector UI cell
+    - Add marimo file browser for output directory
+    - Display metadata after file selection
+    - Show error messages for invalid files
+    - _Requirements: 1.1, 1.5_
+
+- [ ] 3. Implement activity type analysis
+  - [ ] 3.1 Create activity breakdown calculation functions
+    - Implement `analyze_activity_types(df: pd.DataFrame) -> ActivityBreakdown`
+    - Calculate counts, percentages, volumes by activity type
+    - _Requirements: 2.1, 2.3_
+  - [ ] 3.2 Write property test for grouping preserves totals
+    - **Property 2: Grouping preserves totals**
+    - **Validates: Requirements 2.1, 3.1, 6.1**
+  - [ ] 3.3 Write property test for percentages sum to 100
+    - **Property 3: Percentages sum to 100**
+    - **Validates: Requirements 2.1, 4.1**
+  - [ ] 3.4 Create activity breakdown visualization cell
+    - Implement pie chart for activity type distribution
+    - Implement bar chart for volume by activity type
+    - Format amounts with currency notation
+    - _Requirements: 2.2, 2.4_
+
+- [ ] 4. Implement stablecoin comparison analysis
+  - [ ] 4.1 Create stablecoin grouping and metrics functions
+    - Implement grouping by stablecoin with activity distribution
+    - Calculate average transaction size per stablecoin
+    - Calculate store-of-value ratio per stablecoin
+    - _Requirements: 3.1, 3.3, 3.4_
+  - [ ] 4.2 Write property test for volume calculation consistency
+    - **Property 4: Volume calculation consistency**
+    - **Validates: Requirements 2.3, 3.1, 6.1**
+  - [ ] 4.3 Write property test for average calculation correctness
+    - **Property 5: Average calculation correctness**
+    - **Validates: Requirements 3.3, 6.3**
+  - [ ] 4.4 Create stablecoin comparison visualization cell
+    - Implement grouped bar chart comparing USDC vs USDT
+    - Display average transaction size comparison
+    - _Requirements: 3.2_
+
+- [ ] 5. Implement holder behavior analysis
+  - [ ] 5.1 Create holder metrics calculation functions
+    - Implement `analyze_holders(holders_df, transactions_df) -> HolderMetrics`
+    - Calculate SoV percentage, average balances, holding periods
+    - Identify top 10 holders by balance
+    - _Requirements: 4.1, 4.3, 4.4_
+  - [ ] 5.2 Write property test for holder classification consistency
+    - **Property 6: Holder classification consistency**
+    - **Validates: Requirements 4.1**
+  - [ ] 5.3 Write property test for top-N ordering correctness
+    - **Property 7: Top-N ordering correctness**
+    - **Validates: Requirements 4.4**
+  - [ ] 5.4 Create holder analysis visualization cell
+    - Implement histogram of balances by SoV status
+    - Display top holders table with classifications
+    - _Requirements: 4.2, 4.4_
+
+- [ ] 6. Implement time series analysis
+  - [ ] 6.1 Create time series aggregation functions
+    - Implement `analyze_time_series(df, aggregation) -> pd.DataFrame`
+    - Support daily, weekly, monthly aggregations
+    - Group by activity type and stablecoin
+    - _Requirements: 5.1, 5.4_
+  - [ ] 6.2 Write property test for time aggregation preserves totals
+    - **Property 8: Time aggregation preserves totals**
+    - **Validates: Requirements 5.1, 5.4**
+  - [ ] 6.3 Create time series visualization cell
+    - Implement line chart for transaction count over time
+    - Implement line chart for volume over time
+    - Add aggregation period selector UI
+    - _Requirements: 5.2, 5.3, 5.4_
+
+- [ ] 7. Implement chain comparison analysis
+  - [ ] 7.1 Create chain metrics calculation functions
+    - Implement `analyze_by_chain(df) -> list[ChainMetrics]`
+    - Calculate transaction count, volume, avg size per chain
+    - Calculate gas costs and SoV ratio per chain
+    - _Requirements: 6.1, 6.3, 6.4_
+  - [ ] 7.2 Create chain comparison visualization cell
+    - Implement stacked bar chart for activity distribution per chain
+    - Display chain metrics comparison table
+    - _Requirements: 6.2_
+
+- [ ] 8. Implement sample data generator
+  - [ ] 8.1 Create sample data generation functions
+    - Implement `generate_sample_data(config) -> LoadedData`
+    - Generate realistic transactions with proper distributions
+    - Generate holders with SoV classifications
+    - _Requirements: 8.1, 8.2_
+  - [ ] 8.2 Write property test for sample data schema compliance
+    - **Property 9: Sample data schema compliance**
+    - **Validates: Requirements 8.2**
+  - [ ] 8.3 Write property test for sample data respects configuration
+    - **Property 10: Sample data respects configuration**
+    - **Validates: Requirements 8.4**
+  - [ ] 8.4 Create sample data UI controls
+    - Add configuration inputs for sample size, SoV ratio
+    - Add generate button and sample data indicator
+    - _Requirements: 8.3, 8.4_
+
+- [ ] 9. Implement conclusions and summary
+  - [ ] 9.1 Create conclusion generation functions
+    - Implement `generate_conclusions(results, data) -> list[Conclusion]`
+    - Calculate overall transaction vs SoV ratio
+    - Identify dominant usage pattern
+    - _Requirements: 7.1, 7.2_
+  - [ ] 9.2 Write property test for confidence calculation bounds
+    - **Property 11: Confidence calculation bounds**
+    - **Validates: Requirements 7.3**
+  - [ ] 9.3 Write property test for error detection completeness
+    - **Property 12: Error detection completeness**
+    - **Validates: Requirements 7.4**
+  - [ ] 9.4 Create summary panel visualization cell
+    - Display key findings with confidence indicators
+    - Show data quality warnings if errors present
+    - _Requirements: 7.2, 7.3, 7.4_
+
+- [ ] 10. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 11. Integration and polish
+  - [ ] 11.1 Wire all cells together with reactive dependencies
+    - Ensure proper cell ordering and dependencies
+    - Add loading states for long computations
+    - _Requirements: All_
+  - [ ] 11.2 Add documentation and usage instructions
+    - Add markdown cells explaining each analysis section
+    - Document how to use with real vs sample data
+    - _Requirements: 8.3_
+
+- [ ] 12. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
