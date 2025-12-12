@@ -110,6 +110,24 @@ def config(Path):
 
 
 @app.cell
+def utility_functions(Decimal):
+    """Shared utility functions for the notebook."""
+
+    def format_currency(amount: Decimal) -> str:
+        """Format amount with currency notation."""
+        if amount >= Decimal("1000000000"):
+            return f"${float(amount) / 1e9:.2f}B"
+        elif amount >= Decimal("1000000"):
+            return f"${float(amount) / 1e6:.2f}M"
+        elif amount >= Decimal("1000"):
+            return f"${float(amount) / 1e3:.2f}K"
+        else:
+            return f"${float(amount):.2f}"
+
+    return (format_currency,)
+
+
+@app.cell
 def data_modules():
     """Import data loading and validation modules."""
     import sys
@@ -272,21 +290,12 @@ def activity_analysis_cell(loaded_data, analyze_activity_types):
 
 
 @app.cell
-def activity_breakdown_display(mo, loaded_data, activity_breakdown, Decimal):
+def activity_breakdown_display(
+    mo, loaded_data, activity_breakdown, Decimal, format_currency
+):
     """Display activity type breakdown with visualizations."""
     if loaded_data is None or activity_breakdown is None:
         return
-
-    def format_currency(amount: Decimal) -> str:
-        """Format amount with currency notation."""
-        if amount >= Decimal("1000000000"):
-            return f"${float(amount) / 1e9:.2f}B"
-        elif amount >= Decimal("1000000"):
-            return f"${float(amount) / 1e6:.2f}M"
-        elif amount >= Decimal("1000"):
-            return f"${float(amount) / 1e3:.2f}K"
-        else:
-            return f"${float(amount):.2f}"
 
     # Build counts table
     counts_rows = []
@@ -328,7 +337,7 @@ def activity_breakdown_display(mo, loaded_data, activity_breakdown, Decimal):
     | **Total** | **{format_currency(total_volume)}** | **100.0%** |
     """)
 
-    return (format_currency,)
+    return
 
 
 @app.cell
@@ -475,21 +484,12 @@ def stablecoin_analysis_cell(loaded_data, analyze_by_stablecoin):
 
 
 @app.cell
-def stablecoin_comparison_display(mo, loaded_data, stablecoin_comparison, Decimal):
+def stablecoin_comparison_display(
+    mo, loaded_data, stablecoin_comparison, format_currency
+):
     """Display stablecoin comparison metrics."""
     if loaded_data is None or stablecoin_comparison is None:
         return
-
-    def format_currency(amount: Decimal) -> str:
-        """Format amount with currency notation."""
-        if amount >= Decimal("1000000000"):
-            return f"${float(amount) / 1e9:.2f}B"
-        elif amount >= Decimal("1000000"):
-            return f"${float(amount) / 1e6:.2f}M"
-        elif amount >= Decimal("1000"):
-            return f"${float(amount) / 1e3:.2f}K"
-        else:
-            return f"${float(amount):.2f}"
 
     # Build comparison table
     rows = []
@@ -508,8 +508,10 @@ def stablecoin_comparison_display(mo, loaded_data, stablecoin_comparison, Decima
     # Build activity distribution comparison
     activity_rows = []
     for at in ["transaction", "store_of_value", "other"]:
-        usdc_pct = stablecoin_comparison.by_stablecoin["USDC"].activity_distribution.get(at, 0.0)
-        usdt_pct = stablecoin_comparison.by_stablecoin["USDT"].activity_distribution.get(at, 0.0)
+        usdc_metrics = stablecoin_comparison.by_stablecoin.get("USDC")
+        usdt_metrics = stablecoin_comparison.by_stablecoin.get("USDT")
+        usdc_pct = usdc_metrics.activity_distribution.get(at, 0.0) if usdc_metrics else 0.0
+        usdt_pct = usdt_metrics.activity_distribution.get(at, 0.0) if usdt_metrics else 0.0
         activity_rows.append(f"| {at} | {usdc_pct:.1f}% | {usdt_pct:.1f}% |")
 
     activity_table = "\n".join(activity_rows)

@@ -231,6 +231,13 @@ def analyze_by_stablecoin(
     if holders_df is not None and not holders_df.empty:
         if 'stablecoin' in holders_df.columns and \
            'is_store_of_value' in holders_df.columns:
+            # Validate is_store_of_value is boolean or numeric
+            if not (pd.api.types.is_bool_dtype(holders_df['is_store_of_value']) or 
+                    pd.api.types.is_numeric_dtype(holders_df['is_store_of_value'])):
+                raise ValueError(
+                    f"Column 'is_store_of_value' must be boolean or numeric, "
+                    f"got {holders_df['is_store_of_value'].dtype}"
++                )
             for coin in SUPPORTED_STABLECOINS:
                 coin_holders = holders_df[holders_df["stablecoin"] == coin]
                 if len(coin_holders) > 0:
@@ -271,7 +278,7 @@ def calculate_volume_by_dimension(
     if df.empty:
         return result
 
-    for value in df[dimension].unique():
+    for value in df[dimension].dropna().unique():
         mask = df[dimension] == value
         volume = Decimal("0")
         for amt in df.loc[mask, "amount"].dropna():
@@ -329,7 +336,7 @@ def calculate_average_transaction_size(
         if group_by not in df.columns:
             raise ValueError(f"Column '{group_by}' not found in DataFrame")
 
-        for value in df[group_by].unique():
+        for value in df[group_by].dropna().unique():
             mask = df[group_by] == value
             group_df = df.loc[mask, "amount"].dropna()
             total = Decimal("0")

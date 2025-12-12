@@ -109,7 +109,7 @@
     - Display chain metrics comparison table
     - _Requirements: 6.2_
 
-- [ ] 8. Implement sample data generator
+- [ ] 8. Implement sample data generator and conclusions
   - [ ] 8.1 Create sample data generation functions
     - Implement `generate_sample_data(config) -> LoadedData`
     - Generate realistic transactions with proper distributions
@@ -121,40 +121,185 @@
   - [ ] 8.3 Write property test for sample data respects configuration
     - **Property 10: Sample data respects configuration**
     - **Validates: Requirements 8.4**
-  - [ ] 8.4 Create sample data UI controls
+  - [ ] 8.4 Create sample data UI controls and conclusion generation
     - Add configuration inputs for sample size, SoV ratio
-    - Add generate button and sample data indicator
-    - _Requirements: 8.3, 8.4_
-
-- [ ] 9. Implement conclusions and summary
-  - [ ] 9.1 Create conclusion generation functions
     - Implement `generate_conclusions(results, data) -> list[Conclusion]`
     - Calculate overall transaction vs SoV ratio
-    - Identify dominant usage pattern
-    - _Requirements: 7.1, 7.2_
-  - [ ] 9.2 Write property test for confidence calculation bounds
+    - _Requirements: 7.1, 7.2, 8.3, 8.4_
+  - [ ] 8.5 Write property test for confidence calculation bounds
     - **Property 11: Confidence calculation bounds**
     - **Validates: Requirements 7.3**
-  - [ ] 9.3 Write property test for error detection completeness
+  - [ ] 8.6 Write property test for error detection completeness
     - **Property 12: Error detection completeness**
     - **Validates: Requirements 7.4**
-  - [ ] 9.4 Create summary panel visualization cell
+  - [ ] 8.7 Create summary panel visualization cell
     - Display key findings with confidence indicators
     - Show data quality warnings if errors present
     - _Requirements: 7.2, 7.3, 7.4_
 
-- [ ] 10. Checkpoint - Ensure all tests pass
+- [ ] 9. Checkpoint - Ensure all analysis tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 11. Integration and polish
-  - [ ] 11.1 Wire all cells together with reactive dependencies
+- [ ] 10. Set up ZenML infrastructure and collector steps
+  - [ ] 10.1 Add ZenML dependencies and initialize project
+    - Add zenml, scikit-learn, xgboost to requirements.txt
+    - Run `zenml init` to initialize ZenML in the project
+    - Configure ZenML stack (local orchestrator, artifact store)
+    - _Requirements: 9.1, 10.1_
+  - [ ] 10.2 Wrap Etherscan collector as ZenML step
+    - Create `pipelines/steps/collectors.py`
+    - Implement `etherscan_collector_step` with typed outputs
+    - Handle API errors and return partial results
+    - _Requirements: 9.1, 9.2, 9.4_
+  - [ ] 10.3 Wrap BscScan and Polygonscan collectors as ZenML steps
+    - Implement `bscscan_collector_step`
+    - Implement `polygonscan_collector_step`
+    - _Requirements: 9.1, 9.2_
+  - [ ] 10.4 Create aggregation step
+    - Implement `aggregate_data_step` to merge and deduplicate
+    - Output versioned artifact with transactions and holders
+    - _Requirements: 9.3, 9.5_
+  - [ ] 10.5 Write property test for ZenML step output typing
+    - **Property 13: ZenML step output typing**
+    - **Validates: Requirements 9.1, 9.2**
+  - [ ] 10.6 Write property test for aggregation preserves records
+    - **Property 14: Aggregation preserves records**
+    - **Validates: Requirements 9.3**
+
+- [ ] 11. Create ZenML analysis pipeline
+  - [ ] 11.1 Convert analysis functions to ZenML steps
+    - Create `pipelines/steps/analysis.py`
+    - Wrap `analyze_activity_types` as `activity_analysis_step`
+    - Wrap `analyze_holders` as `holder_analysis_step`
+    - Wrap `analyze_time_series` as `time_series_step`
+    - Wrap `analyze_by_chain` as `chain_analysis_step`
+    - _Requirements: 10.1, 10.2_
+  - [ ] 11.2 Create data collection pipeline
+    - Create `pipelines/collection_pipeline.py`
+    - Chain collector steps with aggregation step
+    - Support parameterization for stablecoins and date range
+    - _Requirements: 10.3_
+  - [ ] 11.3 Create analysis pipeline
+    - Create `pipelines/analysis_pipeline.py`
+    - Chain all analysis steps
+    - Output analysis results as versioned artifacts
+    - _Requirements: 10.2, 10.4_
+  - [ ] 11.4 Write property test for pipeline artifact versioning
+    - **Property 15: Pipeline artifact versioning**
+    - **Validates: Requirements 10.2**
+
+- [ ] 12. Implement ML feature engineering and SoV prediction
+  - [ ] 12.1 Create feature engineering step
+    - Create `pipelines/steps/ml.py`
+    - Implement `feature_engineering_step`
+    - Extract features: transaction_count, avg_transaction_size, balance_percentile, holding_period_days, activity_recency_days, transaction_frequency, balance_volatility, cross_chain_flag
+    - _Requirements: 11.1, 12.2_
+  - [ ] 12.2 Write property test for feature engineering completeness
+    - **Property 16: Feature engineering completeness**
+    - **Validates: Requirements 11.1, 12.2**
+  - [ ] 12.3 Implement SoV prediction training step
+    - Implement `train_sov_predictor_step`
+    - Use RandomForest or XGBoost binary classifier
+    - Calculate and log precision, recall, F1, AUC-ROC
+    - Register model in ZenML model registry
+    - _Requirements: 11.2, 11.3, 11.4_
+  - [ ] 12.4 Implement SoV prediction inference step
+    - Implement `predict_sov_step`
+    - Load production model from registry
+    - Output predictions with probabilities
+    - _Requirements: 11.5_
+  - [ ] 12.5 Write property test for SoV prediction probability bounds
+    - **Property 17: SoV prediction probability bounds**
+    - **Validates: Requirements 11.5**
+
+- [ ] 13. Implement wallet behavior classifier
+  - [ ] 13.1 Define wallet behavior classes and labeling logic
+    - Create `pipelines/steps/wallet_classifier.py`
+    - Define classes: trader, holder, whale, retail
+    - Implement labeling function based on thresholds
+    - _Requirements: 12.1_
+  - [ ] 13.2 Implement wallet classifier training step
+    - Implement `train_wallet_classifier_step`
+    - Use multi-class RandomForest or XGBoost
+    - Log metrics and register model
+    - _Requirements: 12.3_
+  - [ ] 13.3 Implement wallet classification inference step
+    - Implement `classify_wallets_step`
+    - Assign exactly one class per wallet with confidence
+    - _Requirements: 12.4_
+  - [ ] 13.4 Write property test for wallet classification exclusivity
+    - **Property 18: Wallet classification exclusivity**
+    - **Validates: Requirements 12.4**
+  - [ ] 13.5 Write property test for model metrics validity
+    - **Property 19: Model metrics validity**
+    - **Validates: Requirements 11.3, 15.2**
+
+- [ ] 14. Create master pipeline and Marimo-ZenML integration
+  - [ ] 14.1 Create master pipeline
+    - Create `pipelines/master_pipeline.py`
+    - Chain collection, analysis, and ML inference
+    - Support weekly cron scheduling configuration
+    - _Requirements: 10.1, 10.5_
+  - [ ] 14.2 Create ZenML-Marimo bridge
+    - Create `notebooks/zenml_bridge.py`
+    - Implement `ZenMLNotebookBridge` class
+    - Methods: list_pipelines, trigger_pipeline, get_run_status, load_latest_artifacts
+    - _Requirements: 13.1, 13.2, 13.3, 13.4_
+  - [ ] 14.3 Write property test for pipeline trigger returns run_id
+    - **Property 20: Pipeline trigger returns run_id**
+    - **Validates: Requirements 13.2**
+  - [ ] 14.4 Create pipeline control UI cells in marimo
+    - Display available pipelines and status
+    - Add "Run Pipeline" button with parameter inputs
+    - Show progress indicators during execution
+    - _Requirements: 13.1, 13.2, 13.3_
+
+- [ ] 15. Implement visualization layer for pipeline outputs
+  - [ ] 15.1 Create artifact loading cells
+    - Load latest pipeline artifacts via ZenML bridge
+    - Display run metadata (run_id, timestamp)
+    - Add refresh mechanism for new results
+    - _Requirements: 14.1, 14.4_
+  - [ ] 15.2 Create ML prediction visualization cells
+    - Display SoV prediction distribution chart
+    - Display wallet behavior classification breakdown
+    - Allow filtering analysis by behavior class
+    - _Requirements: 12.5, 14.3_
+  - [ ] 15.3 Create model comparison UI
+    - Display table of model versions with metrics
+    - Show production model indicator
+    - Add model promotion controls
+    - _Requirements: 15.1, 15.2, 15.3_
+
+- [ ] 16. Implement web export and scheduling
+  - [ ] 16.1 Create static export functionality
+    - Generate static HTML/JSON outputs from notebook
+    - Export visualizations as embeddable components
+    - _Requirements: 14.5_
+  - [ ] 16.2 Configure weekly scheduling
+    - Document cron job setup for master pipeline
+    - Create scheduling configuration file
+    - _Requirements: 10.5_
+  - [ ] 16.3 Add model performance monitoring
+    - Implement metric threshold checking
+    - Flag runs with degraded performance
+    - _Requirements: 15.4, 15.5_
+
+- [ ] 17. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 18. Integration and documentation
+  - [ ] 18.1 Wire all cells together with reactive dependencies
     - Ensure proper cell ordering and dependencies
     - Add loading states for long computations
+    - Test end-to-end flow from pipeline trigger to visualization
     - _Requirements: All_
-  - [ ] 11.2 Add documentation and usage instructions
+  - [ ] 18.2 Add documentation and usage instructions
     - Add markdown cells explaining each analysis section
-    - Document how to use with real vs sample data
-    - _Requirements: 8.3_
+    - Document ZenML pipeline usage
+    - Document ML model interpretation
+    - Create deployment guide for live website
+    - _Requirements: 8.3, 14.5_
 
-- [ ] 12. Final Checkpoint - Ensure all tests pass
+- [ ] 19. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
