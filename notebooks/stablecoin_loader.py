@@ -6,15 +6,18 @@ them to pandas DataFrames for analysis.
 """
 
 import json
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import List, Optional, Union
 
 import pandas as pd
 
 from stablecoin_validation import validate_schema
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,9 +31,34 @@ class LoadedData:
     is_sample_data: bool = False
 
 
-def _parse_timestamp(ts_str: str) -> datetime:
-    """Parse ISO8601 timestamp string to datetime."""
-    return datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+def _safe_decimal(value) -> Optional[Decimal]:
+    """
+    Safely convert a value to Decimal, returning None on failure.
+    
+    Handles None, empty strings, and malformed inputs gracefully.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as e:
+        logger.warning(f"Failed to convert '{value}' to Decimal: {e}")
+        return None
+
+
+def _parse_timestamp(ts_str: str) -> Optional[datetime]:
+    """
+    Parse ISO8601 timestamp string to datetime.
+    
+    Returns None if parsing fails.
+    """
+    if ts_str is None or ts_str == "":
+        return None
+    try:
+        return datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+    except (ValueError, AttributeError) as e:
+        logger.warning(f"Failed to parse timestamp '{ts_str}': {e}")
+        return None
 
 
 def _convert_transactions_to_df(transactions: list) -> pd.DataFrame:
@@ -44,17 +72,22 @@ def _convert_transactions_to_df(transactions: list) -> pd.DataFrame:
 
     df = pd.DataFrame(transactions)
 
-    # Convert amount to Decimal
-    df["amount"] = df["amount"].apply(Decimal)
+    # Convert amount to Decimal with defensive handling
+    df["amount"] = df["amount"].apply(_safe_decimal)
+    
+    # Log warning if any amounts failed to convert
+    null_amounts = df["amount"].isna().sum()
+    if null_amounts > 0:
+        logger.warning(
+            f"Found {null_amounts} transaction(s) with invalid amount values"
+        )
 
-    # Parse timestamps
+    # Parse timestamps with defensive handling
     df["timestamp"] = df["timestamp"].apply(_parse_timestamp)
 
     # Convert gas_price to Decimal if present
     if "gas_price" in df.columns:
-        df["gas_price"] = df["gas_price"].apply(
-            lambda x: Decimal(x) if x is not None else None
-        )
+        df["gas_price"] = df["gas_price"].apply(_safe_decimal)
 
     return df
 
@@ -70,17 +103,48 @@ def _convert_holders_to_df(holders: list) -> pd.DataFrame:
 
     df = pd.DataFrame(holders)
 
-    # Convert balance to Decimal
-    df["balance"] = df["balance"].apply(Decimal)
+    # Convert balance to Decimal with defensive handling
+    df["balance"] = df["balance"].apply(_safe_decimal)
+    
+    # Log warning if any balances failed to convert
+    null_balances = df["balance"].isna().sum()
+    if null_balances > 0:
+        logger.warning(
+            f"Found {null_balances} holder(s) with invalid balance values"
+        )
 
-    # Parse timestamps
+    # Parse timestamps with defensive handling
     df["first_seen"] = df["first_seen"].apply(_parse_timestamp)
     df["last_activity"] = df["last_activity"].apply(_parse_timestamp)
 
-    # Calculate holding period in days
-    df["holding_period_days"] = (
-        df["last_activity"] - df["first_seen"]
-    ).dt.days
+    # Calculate holding period in days, clamping negatives to zero
+    # Handle cases where timestamps might be None
+    valid_timestamps = (
+        df["first_seen"].notna() & df["last_activity"].notna()
+    )
+    
+    df["holding_period_days"] = 0  # Default value
+    
+    if valid_timestamps.any():
+        delta_days = (
+            df.loc[valid_timestamps, "last_activity"] -
+            df.loc[valid_timestamps, "first_seen"]
+        ).dt.days
+        
+        # Flag any invalid rows where last_activity < first_seen
+        invalid_mask = delta_days < 0
+        if invalid_mask.any():
+            invalid_count = invalid_mask.sum()
+            logger.warning(
+                f"Found {invalid_count} holder(s) with "
+                "last_activity < first_seen. "
+                "Clamping holding_period_days to 0 for these rows."
+            )
+        
+        # Clamp negative values to zero
+        df.loc[valid_timestamps, "holding_period_days"] = delta_days.clip(
+            lower=0
+        )
 
     return df
 
@@ -112,7 +176,7 @@ def load_json_file(file_path: Union[str, Path]) -> LoadedData:
     is_valid, validation_errors = validate_schema(data)
     if not is_valid:
         raise ValueError(
-            f"Schema validation failed:\n" +
+            "Schema validation failed:\n" +
             "\n".join(f"  - {e}" for e in validation_errors)
         )
 
@@ -152,7 +216,7 @@ def load_json_data(data: dict) -> LoadedData:
     is_valid, validation_errors = validate_schema(data)
     if not is_valid:
         raise ValueError(
-            f"Schema validation failed:\n" +
+            "Schema validation failed:\n" +
             "\n".join(f"  - {e}" for e in validation_errors)
         )
 

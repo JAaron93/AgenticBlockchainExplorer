@@ -126,24 +126,42 @@ def valid_metadata(draw):
     }
 
 
-@st.composite
-def valid_summary(draw):
-    """Generate valid summary."""
+def compute_summary_from_data(transactions: list) -> dict:
+    """
+    Compute summary statistics from transaction data.
+    
+    This ensures the summary is consistent with the actual transactions.
+    """
+    # Initialize counters
+    by_stablecoin = {
+        coin: {"transaction_count": 0, "total_volume": Decimal("0")}
+        for coin in STABLECOINS
+    }
+    by_activity_type = {at: 0 for at in ACTIVITY_TYPES}
+    by_chain = {chain: 0 for chain in CHAINS}
+    
+    # Aggregate from transactions
+    for tx in transactions:
+        coin = tx["stablecoin"]
+        activity = tx["activity_type"]
+        chain = tx["chain"]
+        amount = Decimal(tx["amount"])
+        
+        by_stablecoin[coin]["transaction_count"] += 1
+        by_stablecoin[coin]["total_volume"] += amount
+        by_activity_type[activity] += 1
+        by_chain[chain] += 1
+    
+    # Convert Decimal volumes to strings for JSON compatibility
+    for coin in by_stablecoin:
+        by_stablecoin[coin]["total_volume"] = str(
+            by_stablecoin[coin]["total_volume"]
+        )
+    
     return {
-        "by_stablecoin": {
-            "USDC": {"transaction_count": draw(st.integers(min_value=0)), "total_volume": "0"},
-            "USDT": {"transaction_count": draw(st.integers(min_value=0)), "total_volume": "0"},
-        },
-        "by_activity_type": {
-            "transaction": draw(st.integers(min_value=0)),
-            "store_of_value": draw(st.integers(min_value=0)),
-            "other": draw(st.integers(min_value=0)),
-        },
-        "by_chain": {
-            "ethereum": draw(st.integers(min_value=0)),
-            "bsc": draw(st.integers(min_value=0)),
-            "polygon": draw(st.integers(min_value=0)),
-        },
+        "by_stablecoin": by_stablecoin,
+        "by_activity_type": by_activity_type,
+        "by_chain": by_chain,
     }
 
 
@@ -155,10 +173,13 @@ def valid_json_export(draw):
 
     metadata = draw(valid_metadata())
     metadata["total_records"] = len(transactions) + len(holders)
+    
+    # Compute summary from actual transaction data for consistency
+    summary = compute_summary_from_data(transactions)
 
     return {
         "metadata": metadata,
-        "summary": draw(valid_summary()),
+        "summary": summary,
         "transactions": transactions,
         "holders": holders,
     }
@@ -220,3 +241,122 @@ class TestSchemaValidation:
             assert "first_seen" in holder
             assert "last_activity" in holder
             assert "is_store_of_value" in holder
+
+
+class TestActivityAnalysis:
+    """Tests for activity type analysis functions."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(transactions=st.lists(valid_transaction(), min_size=0, max_size=50))
+    def test_property_2_grouping_preserves_totals(self, transactions):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 2: Grouping preserves totals**
+
+        For any transactions DataFrame, grouping by any dimension (activity_type,
+        stablecoin, chain) and summing counts SHALL equal the total transaction count,
+        and summing volumes SHALL equal the total volume.
+
+        **Validates: Requirements 2.1, 3.1, 6.1**
+        """
+        import pandas as pd
+        from stablecoin_analysis_functions import analyze_activity_types
+
+        # Convert transactions to DataFrame
+        if not transactions:
+            df = pd.DataFrame(columns=[
+                "transaction_hash", "block_number", "timestamp",
+                "from_address", "to_address", "amount", "stablecoin",
+                "chain", "activity_type", "source_explorer"
+            ])
+        else:
+            df = pd.DataFrame(transactions)
+            # Convert amount strings to Decimal
+            df["amount"] = df["amount"].apply(Decimal)
+
+        total_count = len(df)
+        total_volume = df["amount"].sum() if not df.empty else Decimal("0")
+
+        # Test grouping by activity_type
+        breakdown = analyze_activity_types(df)
+        sum_counts = sum(breakdown.counts.values())
+        sum_volumes = sum(breakdown.volumes.values())
+
+        assert sum_counts == total_count, (
+            f"Sum of counts by activity_type ({sum_counts}) "
+            f"!= total count ({total_count})"
+        )
+        assert sum_volumes == total_volume, (
+            f"Sum of volumes by activity_type ({sum_volumes}) "
+            f"!= total volume ({total_volume})"
+        )
+
+        # Test grouping by stablecoin preserves totals
+        if not df.empty:
+            by_stablecoin_count = df.groupby("stablecoin").size().sum()
+            by_stablecoin_volume = df.groupby("stablecoin")["amount"].sum().sum()
+            assert by_stablecoin_count == total_count, (
+                f"Sum of counts by stablecoin ({by_stablecoin_count}) "
+                f"!= total count ({total_count})"
+            )
+            assert by_stablecoin_volume == total_volume, (
+                f"Sum of volumes by stablecoin ({by_stablecoin_volume}) "
+                f"!= total volume ({total_volume})"
+            )
+
+        # Test grouping by chain preserves totals
+        if not df.empty:
+            by_chain_count = df.groupby("chain").size().sum()
+            by_chain_volume = df.groupby("chain")["amount"].sum().sum()
+            assert by_chain_count == total_count, (
+                f"Sum of counts by chain ({by_chain_count}) "
+                f"!= total count ({total_count})"
+            )
+            assert by_chain_volume == total_volume, (
+                f"Sum of volumes by chain ({by_chain_volume}) "
+                f"!= total volume ({total_volume})"
+            )
+
+    @settings(max_examples=100, deadline=None)
+    @given(transactions=st.lists(valid_transaction(), min_size=1, max_size=50))
+    def test_property_3_percentages_sum_to_100(self, transactions):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 3: Percentages sum to 100**
+
+        For any percentage breakdown calculation (activity types, holder
+        classifications), the sum of all percentages SHALL equal 100%
+        (within floating-point tolerance).
+
+        **Validates: Requirements 2.1, 4.1**
+        """
+        import pandas as pd
+        from stablecoin_analysis_functions import analyze_activity_types
+
+        # Convert transactions to DataFrame
+        df = pd.DataFrame(transactions)
+        # Convert amount strings to Decimal
+        df["amount"] = df["amount"].apply(Decimal)
+
+        # Analyze activity types
+        breakdown = analyze_activity_types(df)
+
+        # Sum of count percentages should equal 100%
+        # (count is always > 0 when transactions list is non-empty)
+        sum_count_pct = sum(breakdown.percentages.values())
+        assert abs(sum_count_pct - 100.0) < 0.01, (
+            f"Sum of count percentages ({sum_count_pct}) != 100%"
+        )
+
+        # Sum of volume percentages should equal 100% when total volume > 0
+        # When total volume is 0, percentages are all 0% (mathematically correct)
+        total_volume = sum(breakdown.volumes.values())
+        sum_volume_pct = sum(breakdown.volume_percentages.values())
+        if total_volume > 0:
+            assert abs(sum_volume_pct - 100.0) < 0.01, (
+                f"Sum of volume percentages ({sum_volume_pct}) != 100%"
+            )
+        else:
+            # When total volume is 0, all percentages should be 0
+            assert sum_volume_pct == 0.0, (
+                f"When total volume is 0, volume percentages should sum to 0, "
+                f"got {sum_volume_pct}"
+            )

@@ -32,18 +32,18 @@
     - Show error messages for invalid files
     - _Requirements: 1.1, 1.5_
 
-- [ ] 3. Implement activity type analysis
-  - [ ] 3.1 Create activity breakdown calculation functions
+- [x] 3. Implement activity type analysis
+  - [x] 3.1 Create activity breakdown calculation functions
     - Implement `analyze_activity_types(df: pd.DataFrame) -> ActivityBreakdown`
     - Calculate counts, percentages, volumes by activity type
     - _Requirements: 2.1, 2.3_
-  - [ ] 3.2 Write property test for grouping preserves totals
+  - [x] 3.2 Write property test for grouping preserves totals
     - **Property 2: Grouping preserves totals**
     - **Validates: Requirements 2.1, 3.1, 6.1**
-  - [ ] 3.3 Write property test for percentages sum to 100
+  - [x] 3.3 Write property test for percentages sum to 100
     - **Property 3: Percentages sum to 100**
     - **Validates: Requirements 2.1, 4.1**
-  - [ ] 3.4 Create activity breakdown visualization cell
+  - [x] 3.4 Create activity breakdown visualization cell
     - Implement pie chart for activity type distribution
     - Implement bar chart for volume by activity type
     - Format amounts with currency notation

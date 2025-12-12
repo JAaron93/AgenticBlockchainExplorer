@@ -122,8 +122,19 @@ def data_modules():
 
     from stablecoin_validation import validate_schema
     from stablecoin_loader import LoadedData, load_json_file, load_json_data
+    from stablecoin_analysis_functions import (
+        ActivityBreakdown,
+        analyze_activity_types,
+    )
 
-    return validate_schema, LoadedData, load_json_file, load_json_data
+    return (
+        validate_schema,
+        LoadedData,
+        load_json_file,
+        load_json_data,
+        ActivityBreakdown,
+        analyze_activity_types,
+    )
 
 
 @app.cell
@@ -236,6 +247,208 @@ def display_metadata(mo, loaded_data, load_error):
         👆 **Select a JSON file above to begin analysis.**
         """)
 
+    return
+
+
+@app.cell
+def activity_analysis_cell(loaded_data, analyze_activity_types):
+    """Analyze activity type distribution."""
+    activity_breakdown = None
+
+    if loaded_data is not None:
+        activity_breakdown = analyze_activity_types(
+            loaded_data.transactions_df
+        )
+
+    return (activity_breakdown,)
+
+
+@app.cell
+def activity_breakdown_display(mo, loaded_data, activity_breakdown, Decimal):
+    """Display activity type breakdown with visualizations."""
+    if loaded_data is None or activity_breakdown is None:
+        return
+
+    def format_currency(amount: Decimal) -> str:
+        """Format amount with currency notation."""
+        if amount >= Decimal("1000000000"):
+            return f"${float(amount) / 1e9:.2f}B"
+        elif amount >= Decimal("1000000"):
+            return f"${float(amount) / 1e6:.2f}M"
+        elif amount >= Decimal("1000"):
+            return f"${float(amount) / 1e3:.2f}K"
+        else:
+            return f"${float(amount):.2f}"
+
+    # Build counts table
+    counts_rows = []
+    for at in ["transaction", "store_of_value", "other"]:
+        count = activity_breakdown.counts.get(at, 0)
+        pct = activity_breakdown.percentages.get(at, 0.0)
+        counts_rows.append(f"| {at} | {count:,} | {pct:.1f}% |")
+
+    total_count = sum(activity_breakdown.counts.values())
+    counts_table = "\n".join(counts_rows)
+
+    # Build volumes table
+    volumes_rows = []
+    for at in ["transaction", "store_of_value", "other"]:
+        vol = activity_breakdown.volumes.get(at, Decimal("0"))
+        vol_pct = activity_breakdown.volume_percentages.get(at, 0.0)
+        volumes_rows.append(
+            f"| {at} | {format_currency(vol)} | {vol_pct:.1f}% |"
+        )
+
+    total_volume = sum(activity_breakdown.volumes.values())
+    volumes_table = "\n".join(volumes_rows)
+
+    mo.md(f"""
+    ## Activity Type Analysis
+
+    ### Transaction Counts by Activity Type
+
+    | Activity Type | Count | Percentage |
+    |---------------|-------|------------|
+    {counts_table}
+    | **Total** | **{total_count:,}** | **100.0%** |
+
+    ### Transaction Volume by Activity Type
+
+    | Activity Type | Volume | Percentage |
+    |---------------|--------|------------|
+    {volumes_table}
+    | **Total** | **{format_currency(total_volume)}** | **100.0%** |
+    """)
+
+    return (format_currency,)
+
+
+@app.cell
+def activity_pie_chart(mo, alt, pd, loaded_data, activity_breakdown):
+    """Create pie chart for activity type distribution."""
+    if loaded_data is None or activity_breakdown is None:
+        return
+
+    # Prepare data for pie chart
+    pie_data = pd.DataFrame([
+        {
+            "activity_type": at,
+            "count": activity_breakdown.counts.get(at, 0),
+            "percentage": activity_breakdown.percentages.get(at, 0.0),
+        }
+        for at in ["transaction", "store_of_value", "other"]
+        if activity_breakdown.counts.get(at, 0) > 0
+    ])
+
+    if pie_data.empty:
+        mo.md("*No transaction data available for pie chart.*")
+        return
+
+    # Create pie chart using Altair
+    pie_chart = alt.Chart(pie_data).mark_arc(innerRadius=50).encode(
+        theta=alt.Theta(field="count", type="quantitative"),
+        color=alt.Color(
+            field="activity_type",
+            type="nominal",
+            scale=alt.Scale(
+                domain=["transaction", "store_of_value", "other"],
+                range=["#4C78A8", "#F58518", "#72B7B2"]
+            ),
+            legend=alt.Legend(title="Activity Type")
+        ),
+        tooltip=[
+            alt.Tooltip("activity_type:N", title="Activity Type"),
+            alt.Tooltip("count:Q", title="Count", format=","),
+            alt.Tooltip("percentage:Q", title="Percentage", format=".1f"),
+        ]
+    ).properties(
+        title="Transaction Distribution by Activity Type",
+        width=300,
+        height=300
+    )
+
+    mo.md("### Activity Type Distribution (Pie Chart)")
+    return (pie_chart,)
+
+
+@app.cell
+def display_pie_chart(mo, loaded_data, activity_breakdown, pie_chart):
+    """Display the pie chart."""
+    if loaded_data is None or activity_breakdown is None:
+        return
+
+    try:
+        mo.ui.altair_chart(pie_chart)
+    except Exception:
+        # Fallback if altair_chart not available
+        pie_chart
+    return
+
+
+@app.cell
+def activity_volume_bar_chart(
+    mo, alt, pd, loaded_data, activity_breakdown, Decimal
+):
+    """Create bar chart for volume by activity type."""
+    if loaded_data is None or activity_breakdown is None:
+        return
+
+    # Prepare data for bar chart
+    bar_data = pd.DataFrame([
+        {
+            "activity_type": at,
+            "volume": float(activity_breakdown.volumes.get(at, Decimal("0"))),
+            "volume_pct": activity_breakdown.volume_percentages.get(at, 0.0),
+        }
+        for at in ["transaction", "store_of_value", "other"]
+    ])
+
+    if bar_data["volume"].sum() == 0:
+        mo.md("*No volume data available for bar chart.*")
+        return
+
+    # Create bar chart using Altair
+    bar_chart = alt.Chart(bar_data).mark_bar().encode(
+        x=alt.X(
+            "activity_type:N",
+            title="Activity Type",
+            sort=["transaction", "store_of_value", "other"]
+        ),
+        y=alt.Y("volume:Q", title="Volume (USD)"),
+        color=alt.Color(
+            "activity_type:N",
+            scale=alt.Scale(
+                domain=["transaction", "store_of_value", "other"],
+                range=["#4C78A8", "#F58518", "#72B7B2"]
+            ),
+            legend=None
+        ),
+        tooltip=[
+            alt.Tooltip("activity_type:N", title="Activity Type"),
+            alt.Tooltip("volume:Q", title="Volume", format=",.2f"),
+            alt.Tooltip("volume_pct:Q", title="Percentage", format=".1f"),
+        ]
+    ).properties(
+        title="Transaction Volume by Activity Type",
+        width=400,
+        height=300
+    )
+
+    mo.md("### Volume by Activity Type (Bar Chart)")
+    return (bar_chart,)
+
+
+@app.cell
+def display_bar_chart(mo, loaded_data, activity_breakdown, bar_chart):
+    """Display the bar chart."""
+    if loaded_data is None or activity_breakdown is None:
+        return
+
+    try:
+        mo.ui.altair_chart(bar_chart)
+    except Exception:
+        # Fallback if altair_chart not available
+        bar_chart
     return
 
 
