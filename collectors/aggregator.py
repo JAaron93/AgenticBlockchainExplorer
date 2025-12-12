@@ -39,6 +39,9 @@ class AggregatedData:
     # Summary statistics
     by_stablecoin: dict[str, StablecoinSummary] = field(default_factory=dict)
     by_activity_type: dict[str, int] = field(default_factory=dict)
+    # by_chain counts total records (transactions + holders) per chain.
+    # This is intentionally a combined metric representing all data collected
+    # from each blockchain network.
     by_chain: dict[str, int] = field(default_factory=dict)
 
     @property
@@ -241,18 +244,23 @@ class DataAggregator:
         Populates the by_stablecoin, by_activity_type, and by_chain
         fields of the AggregatedData object.
 
+        Note on by_chain: This metric intentionally combines transaction
+        counts and holder counts to represent total records collected per
+        chain. This provides a single view of data volume per blockchain.
+
         Args:
             data: AggregatedData object to populate with statistics
         """
         # Initialize counters
         stablecoin_stats: dict[str, StablecoinSummary] = {}
         activity_counts: dict[str, int] = {}
+        # chain_counts tracks total records (transactions + holders) per chain
         chain_counts: dict[str, int] = {}
 
         # Track unique addresses per stablecoin
         stablecoin_addresses: dict[str, set[str]] = {}
 
-        # Process transactions
+        # Process transactions - count each transaction toward its chain
         for tx in data.transactions:
             # By stablecoin
             if tx.stablecoin not in stablecoin_stats:
@@ -271,18 +279,18 @@ class DataAggregator:
                 activity_counts.get(activity_key, 0) + 1
             )
 
-            # By chain
+            # By chain - count transaction as one record
             chain_counts[tx.chain] = chain_counts.get(tx.chain, 0) + 1
 
         # Set unique address counts
         for coin, addresses in stablecoin_addresses.items():
             stablecoin_stats[coin].unique_addresses = len(addresses)
 
-        # Also count holders in chain statistics
+        # Process holders - count each holder toward its chain
         for holder in data.holders:
-            # Count holder by chain
+            # By chain - count holder as one record
             chain_counts[holder.chain] = chain_counts.get(holder.chain, 0) + 1
-            
+
             # Add holder addresses to stablecoin unique addresses
             if holder.stablecoin in stablecoin_addresses:
                 stablecoin_addresses[holder.stablecoin].add(
@@ -296,6 +304,7 @@ class DataAggregator:
             if holder.is_store_of_value:
                 sov_key = ActivityType.STORE_OF_VALUE.value
                 activity_counts[sov_key] = activity_counts.get(sov_key, 0) + 1
+
         data.by_stablecoin = stablecoin_stats
         data.by_activity_type = activity_counts
         data.by_chain = chain_counts

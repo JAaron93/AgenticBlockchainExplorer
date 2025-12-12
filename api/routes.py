@@ -33,6 +33,7 @@ from core.auth0_manager import (
 )
 from core.database import get_database
 from core.db_manager import DatabaseManager, InvalidUUIDError
+from core.orchestrator import AgentOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -311,43 +312,59 @@ async def run_agent_task(
     Creates its own database connection to avoid using request-scoped
     resources that may be closed when the background task runs.
 
-    This is a placeholder that will be replaced with actual agent
-    orchestration when the collector components are implemented.
+    Orchestrates data collection from blockchain explorers, classifies
+    activities, aggregates results, and exports to JSON and database.
     """
+    # Import here to avoid circular imports
+    from main import get_config
+
     # Create a fresh database manager for this background task
     db = get_database()
     db_manager = DatabaseManager(db)
 
     try:
-        # Update status to running
-        await db_manager.update_run_status(run_id, "running")
-        await db_manager.update_run_progress(
-            run_id, 0.0, "Starting data collection..."
+        # Get application configuration
+        app_config = get_config()
+
+        logger.info(
+            f"Agent run {run_id} started for user {user_id}",
+            extra={"run_id": run_id, "user_id": user_id}
         )
 
-        # TODO: Implement actual agent orchestration
-        # For now, this is a placeholder that simulates progress
-        logger.info(f"Agent run {run_id} started for user {user_id}")
+        # Create and run the orchestrator
+        orchestrator = AgentOrchestrator(
+            config=app_config,
+            run_id=run_id,
+            db_manager=db_manager,
+            user_id=user_id,
+        )
 
-        # The actual implementation will:
-        # 1. Initialize collectors for each explorer
-        # 2. Fetch stablecoin transactions in parallel
-        # 3. Classify activities
-        # 4. Aggregate and deduplicate data
-        # 5. Export to JSON and save to database
+        report = await orchestrator.run()
 
-        # Placeholder: Mark as completed with no results
-        # This will be replaced when collectors are implemented
-        await db_manager.update_run_progress(run_id, 1.0, "Collection complete")
-        await db_manager.update_run_status(run_id, "completed")
-
-        logger.info(f"Agent run {run_id} completed")
+        logger.info(
+            f"Agent run {run_id} completed: {report.total_records} records",
+            extra={
+                "run_id": run_id,
+                "total_records": report.total_records,
+                "duration_seconds": report.duration_seconds,
+                "success": report.success,
+            }
+        )
 
     except Exception as e:
-        logger.error(f"Agent run {run_id} failed: {e}")
-        await db_manager.update_run_status(
-            run_id, "failed", error_message=str(e)
+        logger.error(
+            f"Agent run {run_id} failed: {e}",
+            extra={"run_id": run_id, "error": str(e)},
+            exc_info=True
         )
+        # The orchestrator handles status updates on failure,
+        # but we catch here as a safety net
+        try:
+            await db_manager.update_run_status(
+                run_id, "failed", error_message=str(e)
+            )
+        except Exception:
+            pass  # Already logged, don't mask original error
 
 
 @agent_router.post("/run", response_model=RunResponse)
