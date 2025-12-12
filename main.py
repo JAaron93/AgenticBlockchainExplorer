@@ -145,7 +145,7 @@ This API uses OAuth 2.0 with Auth0 for authentication. To access protected endpo
 
 ## Rate Limiting
 
-API requests are limited to 100 requests per minute per user.
+API requests are rate limited per user. See configuration for current limits.
 """,
     version="1.0.0",
     lifespan=lifespan,

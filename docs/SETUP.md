@@ -125,8 +125,8 @@ AUTH0_LOGOUT_URL=http://localhost:8000
 
 **macOS (using Homebrew):**
 ```bash
-brew install postgresql@14
-brew services start postgresql@14
+brew install postgresql@12
+brew services start postgresql@12
 ```
 
 **Ubuntu/Debian:**
@@ -152,8 +152,11 @@ psql -U postgres
 ```
 
 Create the database and user:
+
+> **Security Note:** Use a strong, randomly generated password (not the placeholder below). Never commit database credentials to source control. Store credentials securely using a password manager or secret management tool (e.g., AWS Secrets Manager, HashiCorp Vault).
+
 ```sql
--- Create a dedicated user
+-- Create a dedicated user (replace 'your_secure_password' with a strong password)
 CREATE USER stablecoin_user WITH PASSWORD 'your_secure_password';
 
 -- Create the database
@@ -165,6 +168,8 @@ GRANT ALL PRIVILEGES ON DATABASE stablecoin_explorer TO stablecoin_user;
 -- Exit
 \q
 ```
+
+**Note:** The password `'your_secure_password'` above is illustrative only. Replace it with a secure, randomly generated password for production use.
 
 ### Step 3: Verify Connection
 
@@ -239,6 +244,18 @@ POLYGONSCAN_API_KEY=your_polygonscan_api_key
 ---
 
 ## Environment Configuration
+
+### Understanding Configuration Files
+
+The application uses two types of configuration files:
+
+- **`.env.example`** - A template for sensitive, environment-specific values (secrets, API keys, database credentials). Copy this to `.env` and fill in your values. The `.env.example` file stays in the repository as a reference; only `.env` is used at runtime.
+
+- **`config.example.json`** - Contains non-sensitive, default application settings (timeouts, limits, feature flags). Copy this to `config.json` for local overrides. The `config.example.json` file stays in the repository as a template.
+
+**Required files for the application to run:** `.env` and `config.json`
+
+**Configuration precedence:** Environment variables (from `.env`) take precedence over values in `config.json`. This allows you to override any setting via environment variables without modifying the JSON file.
 
 ### Step 1: Create Environment File
 
@@ -374,9 +391,8 @@ python main.py
 ### Using the CLI (Optional)
 
 For standalone agent execution without the web interface:
-```bash
-python cli.py --config config.json
-```
+The CLI mode allows you to run data collection tasks independently. It reads configuration from `config.json` and credentials from `.env`.
+
 
 ---
 
@@ -403,11 +419,12 @@ Open your browser and navigate to:
 
 ### Test Authentication Flow
 
+Before testing, ensure you have a user account in Auth0. You can create one in the Auth0 Dashboard or sign up through the login flow.
+
 1. Navigate to http://localhost:8000/login
 2. You should be redirected to Auth0
 3. Log in with your Auth0 credentials
 4. You should be redirected back with an access token
-
 ### Run Tests
 
 ```bash

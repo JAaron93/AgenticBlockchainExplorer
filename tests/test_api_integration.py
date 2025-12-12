@@ -189,33 +189,45 @@ class TestAgentEndpoints:
 class TestResultsEndpoints:
     """Tests for results endpoints."""
 
-    @pytest.mark.skip(reason="Requires full auth middleware setup")
     def test_list_results_returns_empty_for_new_user(self, app):
-        """List results returns empty list for user with no runs.
-        
-        This test requires proper FastAPI dependency injection setup
-        for the auth middleware which is complex to mock correctly.
-        """
+        """List results returns empty list for user with no runs."""
         test_app, mock_db, _, mock_user = app
 
+        # Override the auth dependency to return our mock user
+        from api.auth_middleware import get_current_user
+        test_app.dependency_overrides[get_current_user] = lambda: mock_user
+
+        # Ensure mock returns empty list
         mock_db.get_user_runs = AsyncMock(return_value=[])
 
-        # Verify mock is configured correctly
-        assert mock_db.get_user_runs is not None
+        client = TestClient(test_app)
+        response = client.get("/api/results")
 
-    @pytest.mark.skip(reason="Requires full auth middleware setup")
+        assert response.status_code == 200
+        assert response.json() == []
+        mock_db.get_user_runs.assert_awaited_once_with(
+            user_id="auth0|test123",
+            limit=50,
+            offset=0,
+        )
+
     def test_get_result_details_not_found_returns_404(self, app):
-        """Get result details for non-existent run returns 404.
-        
-        This test requires proper FastAPI dependency injection setup
-        for the auth middleware which is complex to mock correctly.
-        """
+        """Get result details for non-existent run returns 404."""
         test_app, mock_db, _, mock_user = app
 
+        # Override the auth dependency to return our mock user
+        from api.auth_middleware import get_current_user
+        test_app.dependency_overrides[get_current_user] = lambda: mock_user
+
+        # Set mock to return None (run not found)
         mock_db.get_run_details = AsyncMock(return_value=None)
 
-        # Verify mock is configured correctly
-        assert mock_db.get_run_details is not None
+        client = TestClient(test_app)
+        response = client.get("/api/results/non-existent-run-id")
+
+        assert response.status_code == 404
+        assert "detail" in response.json()
+        assert "not found" in response.json()["detail"].lower()
 
 
 if __name__ == "__main__":

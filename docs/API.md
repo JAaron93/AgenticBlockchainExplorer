@@ -199,7 +199,7 @@ Handles the Auth0 callback after authentication.
   "token_type": "Bearer",
   "expires_in": 86400,
   "user_id": "auth0|123456789",
-  "email": "[email]"
+  "email": "user@example.com"
 }
 ```
 
