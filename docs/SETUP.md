@@ -264,6 +264,11 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
+> **Security Warning:**
+> - Never commit `.env` to version control (ensure `.env` is in `.gitignore`)
+> - Keep `.env.example` with placeholder values only—no real secrets
+> - If secrets are accidentally exposed, rotate all affected API keys and credentials immediately
+
 ### Step 2: Configure Required Variables
 
 Edit `.env` with your values:
