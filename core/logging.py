@@ -235,7 +235,7 @@ class LogContext:
             _run_id_context.reset(self._token)
 
 
-async def log_with_context(
+def log_with_context(
     logger: logging.Logger,
     level: int,
     message: str,

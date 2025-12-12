@@ -159,8 +159,8 @@
     - Return partial results when some explorers fail
     - _Requirements: 1.5, 4.1, 4.3, 4.5_
 
-- [ ] 12. Create data models
-  - [ ] 12.1 Define core data models
+- [x] 12. Create data models
+  - [x] 12.1 Define core data models
     - Create Transaction dataclass with all required fields
     - Create Holder dataclass for token holder information
     - Define ActivityType enum

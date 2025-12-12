@@ -41,7 +41,7 @@ class NetworkError(StablecoinExplorerError):
     pass
 
 
-class ConnectionError(NetworkError):
+class ServiceConnectionError(NetworkError):
     """Raised when unable to connect to an external service."""
     
     def __init__(
@@ -61,7 +61,7 @@ class ConnectionError(NetworkError):
         self.original_error = original_error
 
 
-class TimeoutError(NetworkError):
+class ServiceTimeoutError(NetworkError):
     """Raised when a request times out."""
     
     def __init__(
@@ -80,6 +80,7 @@ class TimeoutError(NetworkError):
         )
         self.service = service
         self.timeout_seconds = timeout_seconds
+        self.operation = operation
 
 
 class RateLimitError(NetworkError):
