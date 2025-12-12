@@ -11,22 +11,22 @@
     - Verify compatibility with existing dependencies
     - _Requirements: 1.1_
 
-- [ ] 2. Implement data loading and validation
-  - [ ] 2.1 Create schema validation functions
+- [x] 2. Implement data loading and validation
+  - [x] 2.1 Create schema validation functions
     - Implement `validate_schema(data: dict) -> tuple[bool, list[str]]`
     - Validate metadata, summary, transactions, and holders sections
     - Return list of validation errors for invalid data
     - _Requirements: 1.2, 1.4_
-  - [ ] 2.2 Write property test for schema validation round-trip
+  - [x] 2.2 Write property test for schema validation round-trip
     - **Property 1: Schema validation round-trip**
     - **Validates: Requirements 1.2, 8.2**
-  - [ ] 2.3 Create JSON file loader and DataFrame converter
+  - [x] 2.3 Create JSON file loader and DataFrame converter
     - Implement `load_json_file(file_path: str) -> LoadedData`
     - Parse JSON and convert transactions/holders to DataFrames
     - Handle decimal conversion for amount fields
     - Parse ISO8601 timestamps to datetime objects
     - _Requirements: 1.2, 1.3_
-  - [ ] 2.4 Create file selector UI cell
+  - [x] 2.4 Create file selector UI cell
     - Add marimo file browser for output directory
     - Display metadata after file selection
     - Show error messages for invalid files

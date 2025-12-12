@@ -78,7 +78,7 @@ def title(mo):
 
 
 @app.cell
-def config(mo, Path):
+def config(Path):
     """Configuration constants."""
     # Default output directory for JSON exports
     OUTPUT_DIR = Path("output")
@@ -99,7 +99,6 @@ def config(mo, Path):
         "stablecoin", "chain", "activity_type"
     ]
 
-    mo.md(f"**Output directory:** `{OUTPUT_DIR}`")
     return (
         OUTPUT_DIR,
         SUPPORTED_STABLECOINS,
@@ -108,6 +107,136 @@ def config(mo, Path):
         ACTIVITY_TYPES,
         REQUIRED_TRANSACTION_FIELDS,
     )
+
+
+@app.cell
+def data_modules():
+    """Import data loading and validation modules."""
+    import sys
+    from pathlib import Path
+
+    # Add notebooks directory to path for imports
+    notebooks_dir = Path(__file__).parent if '__file__' in dir() else Path('.')
+    if str(notebooks_dir) not in sys.path:
+        sys.path.insert(0, str(notebooks_dir))
+
+    from stablecoin_validation import validate_schema
+    from stablecoin_loader import LoadedData, load_json_file, load_json_data
+
+    return validate_schema, LoadedData, load_json_file, load_json_data
+
+
+@app.cell
+def file_selector_ui(mo, OUTPUT_DIR, Path):
+    """File selector UI for choosing JSON export files."""
+    # Get list of JSON files in output directory
+    json_files = []
+    if OUTPUT_DIR.exists():
+        json_files = sorted([
+            f.name for f in OUTPUT_DIR.iterdir()
+            if f.suffix == '.json'
+        ], reverse=True)
+
+    # Create file selector dropdown
+    file_options = {"-- Select a file --": None}
+    file_options.update({f: str(OUTPUT_DIR / f) for f in json_files})
+
+    file_selector = mo.ui.dropdown(
+        options=file_options,
+        label="Select JSON Export File",
+        value=None,
+    )
+
+    # Sample data toggle
+    use_sample_data = mo.ui.checkbox(
+        label="Use sample data instead",
+        value=False,
+    )
+
+    mo.md(f"""
+    ## Data Source
+
+    Select a JSON export file from the output directory, or use sample data for testing.
+
+    {file_selector}
+
+    {use_sample_data}
+
+    **Available files:** {len(json_files)} JSON file(s) found in `{OUTPUT_DIR}`
+    """)
+
+    return file_selector, use_sample_data, json_files
+
+
+@app.cell
+def load_data_cell(
+    mo,
+    file_selector,
+    use_sample_data,
+    load_json_file,
+):
+    """Load data based on user selection."""
+    loaded_data = None
+    load_error = None
+
+    if use_sample_data.value:
+        # Sample data will be implemented in task 8
+        mo.md("""
+        ⚠️ **Sample data generation not yet implemented.**
+
+        Please select a JSON file from the output directory.
+        """)
+    elif file_selector.value:
+        try:
+            loaded_data = load_json_file(file_selector.value)
+        except FileNotFoundError as e:
+            load_error = f"❌ **File not found:** {e}"
+        except ValueError as e:
+            load_error = f"❌ **Validation error:**\n\n```\n{e}\n```"
+        except Exception as e:
+            load_error = f"❌ **Error loading file:** {type(e).__name__}: {e}"
+
+    return loaded_data, load_error
+
+
+@app.cell
+def display_metadata(mo, loaded_data, load_error):
+    """Display metadata after file selection."""
+    if load_error:
+        mo.md(load_error)
+    elif loaded_data:
+        meta = loaded_data.metadata
+        tx_count = len(loaded_data.transactions_df)
+        holder_count = len(loaded_data.holders_df)
+
+        sample_indicator = ""
+        if loaded_data.is_sample_data:
+            sample_indicator = "\n\n⚠️ **Note:** This analysis is based on synthetic sample data, not real blockchain data."
+
+        error_warnings = ""
+        if loaded_data.errors:
+            error_warnings = f"\n\n⚠️ **Data Quality Warnings:** {len(loaded_data.errors)} error(s) during collection"
+
+        mo.md(f"""
+        ## Data Loaded Successfully ✓
+
+        | Field | Value |
+        |-------|-------|
+        | **Run ID** | `{meta.get('run_id', 'N/A')}` |
+        | **Collection Time** | {meta.get('collection_timestamp', 'N/A')} |
+        | **Agent Version** | {meta.get('agent_version', 'N/A')} |
+        | **Explorers Queried** | {', '.join(meta.get('explorers_queried', []))} |
+        | **Total Records** | {meta.get('total_records', 'N/A')} |
+        | **Transactions Loaded** | {tx_count} |
+        | **Holders Loaded** | {holder_count} |
+        {sample_indicator}{error_warnings}
+        """)
+    else:
+        mo.md("""
+        👆 **Select a JSON file above to begin analysis.**
+        """)
+
+    return
 
 
 if __name__ == "__main__":
