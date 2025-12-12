@@ -1731,15 +1731,21 @@ def generate_sample_cell(
 
 @app.cell
 def merge_data_sources(loaded_data, sample_data):
-    """Merge loaded data and sample data into a single source."""
+    """Merge loaded data and sample data into a single source.
+    
+    Returns the merged data as 'loaded_data' so downstream analysis cells
+    continue to work without modification.
+    """
     # Use sample data if available, otherwise use loaded data
-    analysis_data = sample_data if sample_data is not None else loaded_data
-    return (analysis_data,)
+    # Return as loaded_data to maintain compatibility with downstream cells
+    if sample_data is not None:
+        loaded_data = sample_data
+    return (loaded_data,)
 
 
 @app.cell
 def conclusions_analysis_cell(
-    analysis_data,
+    loaded_data,
     activity_breakdown,
     holder_metrics,
     chain_metrics,
@@ -1752,9 +1758,9 @@ def conclusions_analysis_cell(
     conclusions = None
     warnings = None
 
-    if analysis_data is not None:
+    if loaded_data is not None:
         # Calculate confidence
-        confidence_metrics = calculate_confidence(analysis_data.transactions_df)
+        confidence_metrics = calculate_confidence(loaded_data.transactions_df)
 
         # Generate conclusions if we have all the analysis results
         if activity_breakdown and holder_metrics and chain_metrics:
@@ -1763,12 +1769,12 @@ def conclusions_analysis_cell(
                 holder_metrics,
                 chain_metrics,
                 confidence_metrics,
-                analysis_data.errors,
+                loaded_data.errors,
             )
 
         # Get data quality warnings
         warnings = get_data_quality_warnings(
-            analysis_data.errors,
+            loaded_data.errors,
             confidence_metrics,
         )
 
@@ -1778,14 +1784,14 @@ def conclusions_analysis_cell(
 @app.cell
 def summary_panel_display(
     mo,
-    analysis_data,
+    loaded_data,
     confidence_metrics,
     conclusions,
     warnings,
     ConfidenceLevel,
 ):
     """Display summary panel with key findings and confidence indicators."""
-    if analysis_data is None or confidence_metrics is None:
+    if loaded_data is None or confidence_metrics is None:
         return
 
     # Confidence level styling
@@ -1839,7 +1845,7 @@ def summary_panel_display(
 
     # Sample data indicator
     sample_indicator = ""
-    if analysis_data.is_sample_data:
+    if loaded_data.is_sample_data:
         sample_indicator = """
     > ⚠️ **Note:** This analysis is based on synthetic sample data, not real blockchain data.
     > Results are for demonstration purposes only.
@@ -1865,14 +1871,14 @@ def summary_panel_display(
 @app.cell
 def final_summary(
     mo,
-    analysis_data,
+    loaded_data,
     activity_breakdown,
     holder_metrics,
     confidence_metrics,
     ConfidenceLevel,
 ):
     """Display final summary answering the main question."""
-    if (analysis_data is None or activity_breakdown is None or
+    if (loaded_data is None or activity_breakdown is None or
             holder_metrics is None or confidence_metrics is None):
         return
 

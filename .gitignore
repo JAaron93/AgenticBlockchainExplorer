@@ -63,6 +63,9 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# Test artifacts
+MagicMock/
+
 # Alembic
 alembic/versions/*.pyc
 

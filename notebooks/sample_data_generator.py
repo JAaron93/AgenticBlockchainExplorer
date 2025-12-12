@@ -324,20 +324,18 @@ def compute_summary(
     }
 
 
-def generate_sample_data(config: SampleDataConfig) -> LoadedData:
+def _generate_raw_sample_data(config: SampleDataConfig) -> dict:
     """
-    Generate synthetic sample data for testing and demonstration.
+    Generate raw sample data as dictionaries.
     
-    Creates realistic transaction and holder records following the same
-    schema as real exports from the blockchain explorer data collection.
+    This is the core generation logic shared by generate_sample_data
+    and generate_sample_json.
     
     Args:
         config: Configuration specifying sample size and distribution
     
     Returns:
-        LoadedData container with generated data, marked as sample data
-    
-    Requirements: 8.1, 8.2
+        Dictionary with keys: metadata, summary, transactions, holders
     """
     # Set random seed if provided for reproducibility
     if config.seed is not None:
@@ -381,15 +379,41 @@ def generate_sample_data(config: SampleDataConfig) -> LoadedData:
         "total_records": len(transactions) + len(holders),
     }
     
+    return {
+        "metadata": metadata,
+        "summary": summary,
+        "transactions": transactions,
+        "holders": holders,
+    }
+
+
+def generate_sample_data(config: SampleDataConfig) -> LoadedData:
+    """
+    Generate synthetic sample data for testing and demonstration.
+    
+    Creates realistic transaction and holder records following the same
+    schema as real exports from the blockchain explorer data collection.
+    
+    Args:
+        config: Configuration specifying sample size and distribution
+    
+    Returns:
+        LoadedData container with generated data, marked as sample data
+    
+    Requirements: 8.1, 8.2
+    """
+    # Generate raw data using shared helper
+    raw_data = _generate_raw_sample_data(config)
+    
     # Convert to DataFrames
-    transactions_df = _convert_transactions_to_df(transactions)
-    holders_df = _convert_holders_to_df(holders)
+    transactions_df = _convert_transactions_to_df(raw_data["transactions"])
+    holders_df = _convert_holders_to_df(raw_data["holders"])
     
     return LoadedData(
-        metadata=metadata,
+        metadata=raw_data["metadata"],
         transactions_df=transactions_df,
         holders_df=holders_df,
-        summary=summary,
+        summary=raw_data["summary"],
         errors=[],
         is_sample_data=True,
     )
@@ -467,51 +491,5 @@ def generate_sample_json(config: SampleDataConfig) -> dict:
     
     Requirements: 8.2
     """
-    # Set random seed if provided for reproducibility
-    if config.seed is not None:
-        random.seed(config.seed)
-    
-    # Calculate date range
-    end_date = datetime.now(timezone.utc)
-    start_date = end_date - timedelta(days=config.date_range_days)
-    
-    # Generate a pool of addresses
-    # Ensure we have at least 1 address if we have any transactions
-    min_addresses = 1 if config.num_transactions > 0 else 0
-    num_addresses = max(
-        config.num_holders,
-        min(config.num_transactions // 2, 500),
-        min_addresses
-    )
-    addresses = [_generate_address() for _ in range(num_addresses)]
-    
-    # Generate transactions
-    transactions = generate_sample_transactions(
-        config, addresses, start_date, end_date
-    )
-    
-    # Generate holders
-    holders = generate_sample_holders(
-        config, addresses, start_date, end_date
-    )
-    
-    # Compute summary
-    summary = compute_summary(transactions, holders)
-    
-    # Create metadata
-    metadata = {
-        "run_id": str(uuid.uuid4()),
-        "collection_timestamp": _format_timestamp(datetime.now(timezone.utc)),
-        "agent_version": "sample-generator-1.0.0",
-        "explorers_queried": list(set(
-            _get_explorer_for_chain(c) for c in config.chains
-        )),
-        "total_records": len(transactions) + len(holders),
-    }
-    
-    return {
-        "metadata": metadata,
-        "summary": summary,
-        "transactions": transactions,
-        "holders": holders,
-    }
+    # Use shared helper to generate raw data
+    return _generate_raw_sample_data(config)

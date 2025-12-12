@@ -1400,7 +1400,7 @@ def generate_conclusions(
                 ),
             ))
     
-    # 4. Stablecoin with highest SoV ratio
+    # 4. Chain with highest SoV ratio
     if chain_metrics:
         chains_with_sov = [c for c in chain_metrics if c.sov_ratio > 0]
         if chains_with_sov:
