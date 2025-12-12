@@ -113,9 +113,63 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="Blockchain Stablecoin Explorer",
-    description="Autonomous agent for collecting and analyzing stablecoin usage data",
+    description="""
+## Overview
+
+The Blockchain Stablecoin Explorer is an autonomous agent that collects and analyzes 
+USDC and USDT stablecoin usage data from multiple blockchain networks.
+
+## Features
+
+- **Multi-chain Support**: Ethereum, BSC, and Polygon networks
+- **Activity Classification**: Transactions, store of value, and other activities
+- **Structured Output**: JSON format for easy analysis
+- **Secure Access**: Auth0-based authentication and authorization
+
+## Authentication
+
+This API uses OAuth 2.0 with Auth0 for authentication. To access protected endpoints:
+
+1. Navigate to `/login` to initiate the OAuth flow
+2. After authentication, you'll receive an access token
+3. Include the token in the `Authorization` header: `Bearer <token>`
+
+## Permissions
+
+| Permission | Description |
+|------------|-------------|
+| `run:agent` | Trigger data collection runs |
+| `view:results` | View collection results |
+| `download:data` | Download JSON outputs |
+| `admin:config` | Administrative access |
+
+## Rate Limiting
+
+API requests are limited to 100 requests per minute per user.
+""",
     version="1.0.0",
     lifespan=lifespan,
+    openapi_tags=[
+        {
+            "name": "Health",
+            "description": "Health check endpoints for monitoring and load balancers",
+        },
+        {
+            "name": "Authentication",
+            "description": "OAuth 2.0 authentication flow with Auth0",
+        },
+        {
+            "name": "Agent Control",
+            "description": "Trigger and monitor data collection runs",
+        },
+        {
+            "name": "Results",
+            "description": "Access and download collection results",
+        },
+    ],
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 
@@ -250,9 +304,12 @@ app.include_router(agent_router)
 app.include_router(results_router)
 
 
-@app.get("/")
+@app.get("/", tags=["Health"])
 async def root():
-    """Root endpoint - basic service info."""
+    """Root endpoint - basic service info.
+    
+    Returns basic information about the service including name and version.
+    """
     return {
         "status": "ok",
         "service": "Blockchain Stablecoin Explorer",
@@ -260,13 +317,16 @@ async def root():
     }
 
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def health_check():
-    """Basic health check endpoint for load balancers."""
+    """Basic health check endpoint for load balancers.
+    
+    Returns a simple healthy status. Use this for basic liveness checks.
+    """
     return {"status": "healthy"}
 
 
-@app.get("/health/ready")
+@app.get("/health/ready", tags=["Health"])
 async def readiness_check():
     """Readiness check - verifies all dependencies are available.
     
@@ -327,7 +387,7 @@ async def readiness_check():
     )
 
 
-@app.get("/health/live")
+@app.get("/health/live", tags=["Health"])
 async def liveness_check():
     """Liveness check - verifies the application is running.
     

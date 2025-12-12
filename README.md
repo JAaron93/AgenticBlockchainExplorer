@@ -11,68 +11,91 @@ An autonomous agent that explores blockchain explorers to collect and analyze US
 - Structured JSON output for analysis
 - Robust error handling and retry logic
 
+## Documentation
+
+- **[Setup Guide](docs/SETUP.md)** - Complete setup instructions including Auth0, database, and API keys
+- **[API Documentation](docs/API.md)** - REST API reference with examples
+- **[Configuration Guide](config/README.md)** - Detailed configuration options and production deployment
+
+## Quick Start
+
+```bash
+# 1. Clone and setup
+git clone <repository-url>
+cd blockchain-stablecoin-explorer
+python -m venv venv
+source venv/bin/activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Configure environment
+cp .env.example .env
+cp config.example.json config.json
+# Edit .env with your Auth0, database, and API key settings
+
+# 4. Run migrations
+alembic upgrade head
+
+# 5. Start the server
+uvicorn main:app --reload
+```
+
+For detailed setup instructions, see the [Setup Guide](docs/SETUP.md).
+
 ## Project Structure
 
 ```
 .
 ├── api/              # FastAPI endpoints and middleware
-├── core/             # Core business logic (orchestrator, classifier, aggregator)
+├── core/             # Core business logic (orchestrator, auth, database)
 ├── collectors/       # Blockchain explorer data collectors
-├── models/           # Data models and database schemas
+├── models/           # SQLAlchemy database models
 ├── config/           # Configuration management
+├── docs/             # Documentation
 ├── tests/            # Test suite
 ├── output/           # Generated JSON output files (created at runtime)
 └── main.py           # Application entry point
 ```
 
-## Setup
+## API Overview
 
-### Prerequisites
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/login` | GET | Initiate Auth0 login |
+| `/callback` | GET | Auth0 OAuth callback |
+| `/logout` | GET | Log out user |
+| `/api/agent/run` | POST | Start data collection |
+| `/api/agent/status/{run_id}` | GET | Check run status |
+| `/api/results` | GET | List all runs |
+| `/api/results/{run_id}` | GET | Get run details |
+| `/api/results/{run_id}/download` | GET | Download JSON output |
 
-- Python 3.9+
-- PostgreSQL 12+
-- Auth0 account
-- API keys for Etherscan, BscScan, and Polygonscan
-
-### Installation
-
-1. Clone the repository
-2. Create and activate a virtual environment:
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Copy `.env.example` to `.env` and fill in your configuration
-4. Install dependencies:
-
-Using Poetry:
-```bash
-poetry install
-```
-
-Using pip:
-```bash
-pip install -r requirements.txt
-```
-
-5. Run database migrations:
-```bash
-alembic upgrade head
-```
-
-6. Start the application:
-```bash
-uvicorn main:app --reload
-```
+For complete API documentation, see [docs/API.md](docs/API.md) or visit `/docs` when running.
 
 ## Configuration
 
-See `.env.example` for all available configuration options.
+### Required Environment Variables
 
-## API Documentation
+```bash
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/stablecoin_explorer
 
-Once running, visit `http://localhost:8000/docs` for interactive API documentation.
+# Auth0
+AUTH0_DOMAIN=your-tenant.auth0.com
+AUTH0_CLIENT_ID=your_client_id
+AUTH0_CLIENT_SECRET=your_client_secret
+AUTH0_AUDIENCE=https://your-api-identifier
+AUTH0_CALLBACK_URL=http://localhost:8000/callback
+AUTH0_LOGOUT_URL=http://localhost:8000
+
+# Blockchain Explorer API Keys
+ETHERSCAN_API_KEY=your_key
+BSCSCAN_API_KEY=your_key
+POLYGONSCAN_API_KEY=your_key
+```
+
+See [.env.example](.env.example) for all configuration options.
 
 ## Development
 
