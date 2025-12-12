@@ -10,6 +10,11 @@ from collectors.aggregator import (
     AggregatedData,
     StablecoinSummary,
 )
+from collectors.exporter import (
+    JSONExporter,
+    JSONExportError,
+    JSONSchemaValidationError,
+)
 
 __all__ = [
     "ExplorerCollector",
@@ -20,4 +25,7 @@ __all__ = [
     "DataAggregator",
     "AggregatedData",
     "StablecoinSummary",
+    "JSONExporter",
+    "JSONExportError",
+    "JSONSchemaValidationError",
 ]

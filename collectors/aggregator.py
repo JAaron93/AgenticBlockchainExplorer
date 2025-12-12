@@ -280,6 +280,9 @@ class DataAggregator:
 
         # Also count holders in chain statistics
         for holder in data.holders:
+            # Count holder by chain
+            chain_counts[holder.chain] = chain_counts.get(holder.chain, 0) + 1
+            
             # Add holder addresses to stablecoin unique addresses
             if holder.stablecoin in stablecoin_addresses:
                 stablecoin_addresses[holder.stablecoin].add(
@@ -293,7 +296,6 @@ class DataAggregator:
             if holder.is_store_of_value:
                 sov_key = ActivityType.STORE_OF_VALUE.value
                 activity_counts[sov_key] = activity_counts.get(sov_key, 0) + 1
-
         data.by_stablecoin = stablecoin_stats
         data.by_activity_type = activity_counts
         data.by_chain = chain_counts

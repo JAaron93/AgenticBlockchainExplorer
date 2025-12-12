@@ -110,15 +110,15 @@
     - Generate summary statistics by stablecoin, chain, and activity type
     - _Requirements: 3.4, 4.4_
 
-- [ ] 9. Implement JSON export
-  - [ ] 9.1 Create JSON exporter
+- [x] 9. Implement JSON export
+  - [x] 9.1 Create JSON exporter
     - Implement JSONExporter class with export method
     - Generate output filename with run_id and timestamp
     - Validate JSON schema before writing
     - Write JSON file to configured output directory
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
   
-  - [ ] 9.2 Add database persistence
+  - [x] 9.2 Add database persistence
     - Implement save_to_database method in JSONExporter
     - Store run results metadata in run_results table
     - Save summary statistics to database
