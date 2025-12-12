@@ -15,6 +15,11 @@ python-json-logger==2.0.7
 eth-utils==5.1.0
 eth-hash[pycryptodome]==0.7.1
 
+# Notebook and visualization dependencies
+marimo==0.10.9
+altair==5.4.1
+pandas>=2.0.0
+
 # Development dependencies
 pytest==7.4.3
 pytest-asyncio==0.21.1
@@ -22,3 +27,4 @@ httpx==0.25.2
 black==23.11.0
 flake8==6.1.0
 mypy==1.7.1
+hypothesis==6.112.0

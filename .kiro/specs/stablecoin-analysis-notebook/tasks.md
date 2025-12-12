@@ -1,12 +1,12 @@
 # Implementation Plan
 
-- [ ] 1. Set up marimo notebook structure and dependencies
-  - [ ] 1.1 Create the marimo notebook file with initial imports and configuration
+- [x] 1. Set up marimo notebook structure and dependencies
+  - [x] 1.1 Create the marimo notebook file with initial imports and configuration
     - Create `notebooks/stablecoin_analysis.py` as a marimo notebook
     - Add imports for marimo, pandas, altair, decimal, dataclasses, pathlib
     - Configure marimo app with title and description
     - _Requirements: 1.1_
-  - [ ] 1.2 Update project dependencies
+  - [x] 1.2 Update project dependencies
     - Add marimo, altair, hypothesis to requirements.txt
     - Verify compatibility with existing dependencies
     - _Requirements: 1.1_
