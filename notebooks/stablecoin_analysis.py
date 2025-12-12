@@ -125,6 +125,10 @@ def data_modules():
     from stablecoin_analysis_functions import (
         ActivityBreakdown,
         analyze_activity_types,
+        StablecoinMetrics,
+        StablecoinComparison,
+        analyze_by_stablecoin,
+        calculate_average_transaction_size,
     )
 
     return (
@@ -134,6 +138,10 @@ def data_modules():
         load_json_data,
         ActivityBreakdown,
         analyze_activity_types,
+        StablecoinMetrics,
+        StablecoinComparison,
+        analyze_by_stablecoin,
+        calculate_average_transaction_size,
     )
 
 
@@ -371,7 +379,6 @@ def activity_pie_chart(mo, alt, pd, loaded_data, activity_breakdown):
 
 
 @app.cell
-@app.cell
 def display_pie_chart(mo, loaded_data, activity_breakdown, pie_chart):
     """Display the pie chart."""
     if loaded_data is None or activity_breakdown is None or pie_chart is None:
@@ -382,6 +389,8 @@ def display_pie_chart(mo, loaded_data, activity_breakdown, pie_chart):
     except Exception:
         # Fallback if altair_chart not available
         return pie_chart
+
+
 @app.cell
 def activity_volume_bar_chart(
     mo, alt, pd, loaded_data, activity_breakdown, Decimal
@@ -400,7 +409,6 @@ def activity_volume_bar_chart(
         for at in ["transaction", "store_of_value", "other"]
     ])
 
-    if bar_data["volume"].sum() == 0:
     if bar_data["volume"].sum() == 0:
         return (None,)
     # Create bar chart using Altair
@@ -436,8 +444,6 @@ def activity_volume_bar_chart(
 
 @app.cell
 def display_bar_chart(mo, loaded_data, activity_breakdown, bar_chart):
-@app.cell
-def display_bar_chart(mo, loaded_data, activity_breakdown, bar_chart):
     """Display the bar chart."""
     if loaded_data is None or activity_breakdown is None or bar_chart is None:
         return
@@ -447,5 +453,223 @@ def display_bar_chart(mo, loaded_data, activity_breakdown, bar_chart):
     except Exception:
         # Fallback if altair_chart not available
         return bar_chart
+
+
+# =============================================================================
+# Stablecoin Comparison Analysis (Task 4)
+# =============================================================================
+
+
+@app.cell
+def stablecoin_analysis_cell(loaded_data, analyze_by_stablecoin):
+    """Analyze transactions grouped by stablecoin type."""
+    stablecoin_comparison = None
+
+    if loaded_data is not None:
+        stablecoin_comparison = analyze_by_stablecoin(
+            loaded_data.transactions_df,
+            loaded_data.holders_df,
+        )
+
+    return (stablecoin_comparison,)
+
+
+@app.cell
+def stablecoin_comparison_display(mo, loaded_data, stablecoin_comparison, Decimal):
+    """Display stablecoin comparison metrics."""
+    if loaded_data is None or stablecoin_comparison is None:
+        return
+
+    def format_currency(amount: Decimal) -> str:
+        """Format amount with currency notation."""
+        if amount >= Decimal("1000000000"):
+            return f"${float(amount) / 1e9:.2f}B"
+        elif amount >= Decimal("1000000"):
+            return f"${float(amount) / 1e6:.2f}M"
+        elif amount >= Decimal("1000"):
+            return f"${float(amount) / 1e3:.2f}K"
+        else:
+            return f"${float(amount):.2f}"
+
+    # Build comparison table
+    rows = []
+    for coin in ["USDC", "USDT"]:
+        metrics = stablecoin_comparison.by_stablecoin.get(coin)
+        if metrics:
+            rows.append(
+                f"| {coin} | {metrics.transaction_count:,} | "
+                f"{format_currency(metrics.total_volume)} | "
+                f"{format_currency(metrics.avg_transaction_size)} | "
+                f"{metrics.sov_ratio * 100:.1f}% |"
+            )
+
+    table_rows = "\n".join(rows)
+
+    # Build activity distribution comparison
+    activity_rows = []
+    for at in ["transaction", "store_of_value", "other"]:
+        usdc_pct = stablecoin_comparison.by_stablecoin["USDC"].activity_distribution.get(at, 0.0)
+        usdt_pct = stablecoin_comparison.by_stablecoin["USDT"].activity_distribution.get(at, 0.0)
+        activity_rows.append(f"| {at} | {usdc_pct:.1f}% | {usdt_pct:.1f}% |")
+
+    activity_table = "\n".join(activity_rows)
+
+    mo.md(f"""
+    ## Stablecoin Comparison Analysis
+
+    ### Overview by Stablecoin
+
+    | Stablecoin | Transactions | Total Volume | Avg Tx Size | SoV Ratio |
+    |------------|--------------|--------------|-------------|-----------|
+    {table_rows}
+
+    ### Activity Type Distribution by Stablecoin
+
+    | Activity Type | USDC | USDT |
+    |---------------|------|------|
+    {activity_table}
+
+    **Note:** SoV Ratio = percentage of holders classified as store-of-value
+    """)
+
     return
+
+
+@app.cell
+def stablecoin_grouped_bar_chart(
+    mo, alt, pd, loaded_data, stablecoin_comparison, Decimal
+):
+    """Create grouped bar chart comparing USDC vs USDT activity distribution."""
+    if loaded_data is None or stablecoin_comparison is None:
+        return
+
+    # Prepare data for grouped bar chart
+    chart_data = []
+    for coin in ["USDC", "USDT"]:
+        metrics = stablecoin_comparison.by_stablecoin.get(coin)
+        if metrics:
+            for at in ["transaction", "store_of_value", "other"]:
+                pct = metrics.activity_distribution.get(at, 0.0)
+                chart_data.append({
+                    "stablecoin": coin,
+                    "activity_type": at,
+                    "percentage": pct,
+                })
+
+    if not chart_data:
+        return (None,)
+
+    chart_df = pd.DataFrame(chart_data)
+
+    # Create grouped bar chart
+    grouped_chart = alt.Chart(chart_df).mark_bar().encode(
+        x=alt.X(
+            "activity_type:N",
+            title="Activity Type",
+            sort=["transaction", "store_of_value", "other"],
+            axis=alt.Axis(labelAngle=-45)
+        ),
+        y=alt.Y("percentage:Q", title="Percentage (%)"),
+        color=alt.Color(
+            "stablecoin:N",
+            scale=alt.Scale(
+                domain=["USDC", "USDT"],
+                range=["#2775CA", "#26A17B"]  # USDC blue, USDT green
+            ),
+            legend=alt.Legend(title="Stablecoin")
+        ),
+        xOffset="stablecoin:N",
+        tooltip=[
+            alt.Tooltip("stablecoin:N", title="Stablecoin"),
+            alt.Tooltip("activity_type:N", title="Activity Type"),
+            alt.Tooltip("percentage:Q", title="Percentage", format=".1f"),
+        ]
+    ).properties(
+        title="Activity Type Distribution: USDC vs USDT",
+        width=400,
+        height=300
+    )
+
+    mo.md("### Activity Distribution Comparison (Grouped Bar Chart)")
+    return (grouped_chart,)
+
+
+@app.cell
+def display_grouped_chart(mo, loaded_data, stablecoin_comparison, grouped_chart):
+    """Display the grouped bar chart."""
+    if loaded_data is None or stablecoin_comparison is None:
+        return
+    if grouped_chart is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(grouped_chart)
+    except Exception:
+        return grouped_chart
+
+
+@app.cell
+def avg_tx_size_comparison_chart(
+    mo, alt, pd, loaded_data, stablecoin_comparison, Decimal
+):
+    """Create bar chart comparing average transaction size by stablecoin."""
+    if loaded_data is None or stablecoin_comparison is None:
+        return
+
+    # Prepare data for average transaction size comparison
+    avg_data = []
+    for coin in ["USDC", "USDT"]:
+        metrics = stablecoin_comparison.by_stablecoin.get(coin)
+        if metrics and metrics.transaction_count > 0:
+            avg_data.append({
+                "stablecoin": coin,
+                "avg_tx_size": float(metrics.avg_transaction_size),
+            })
+
+    if not avg_data:
+        return (None,)
+
+    avg_df = pd.DataFrame(avg_data)
+
+    # Create bar chart for average transaction size
+    avg_chart = alt.Chart(avg_df).mark_bar().encode(
+        x=alt.X("stablecoin:N", title="Stablecoin"),
+        y=alt.Y("avg_tx_size:Q", title="Average Transaction Size (USD)"),
+        color=alt.Color(
+            "stablecoin:N",
+            scale=alt.Scale(
+                domain=["USDC", "USDT"],
+                range=["#2775CA", "#26A17B"]
+            ),
+            legend=None
+        ),
+        tooltip=[
+            alt.Tooltip("stablecoin:N", title="Stablecoin"),
+            alt.Tooltip("avg_tx_size:Q", title="Avg Tx Size", format=",.2f"),
+        ]
+    ).properties(
+        title="Average Transaction Size: USDC vs USDT",
+        width=300,
+        height=300
+    )
+
+    mo.md("### Average Transaction Size Comparison")
+    return (avg_chart,)
+
+
+@app.cell
+def display_avg_chart(mo, loaded_data, stablecoin_comparison, avg_chart):
+    """Display the average transaction size chart."""
+    if loaded_data is None or stablecoin_comparison is None:
+        return
+    if avg_chart is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(avg_chart)
+    except Exception:
+        return avg_chart
+
+
+if __name__ == "__main__":
     app.run()

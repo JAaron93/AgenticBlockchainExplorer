@@ -49,19 +49,19 @@
     - Format amounts with currency notation
     - _Requirements: 2.2, 2.4_
 
-- [ ] 4. Implement stablecoin comparison analysis
-  - [ ] 4.1 Create stablecoin grouping and metrics functions
+- [x] 4. Implement stablecoin comparison analysis
+  - [x] 4.1 Create stablecoin grouping and metrics functions
     - Implement grouping by stablecoin with activity distribution
     - Calculate average transaction size per stablecoin
     - Calculate store-of-value ratio per stablecoin
     - _Requirements: 3.1, 3.3, 3.4_
-  - [ ] 4.2 Write property test for volume calculation consistency
+  - [x] 4.2 Write property test for volume calculation consistency
     - **Property 4: Volume calculation consistency**
     - **Validates: Requirements 2.3, 3.1, 6.1**
-  - [ ] 4.3 Write property test for average calculation correctness
+  - [x] 4.3 Write property test for average calculation correctness
     - **Property 5: Average calculation correctness**
     - **Validates: Requirements 3.3, 6.3**
-  - [ ] 4.4 Create stablecoin comparison visualization cell
+  - [x] 4.4 Create stablecoin comparison visualization cell
     - Implement grouped bar chart comparing USDC vs USDT
     - Display average transaction size comparison
     - _Requirements: 3.2_

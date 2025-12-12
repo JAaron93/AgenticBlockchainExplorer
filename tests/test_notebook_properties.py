@@ -370,3 +370,142 @@ class TestActivityAnalysis:
                 f"When total volume is 0, volume percentages should sum to 0, "
                 f"got {sum_volume_pct}"
             )
+
+
+class TestStablecoinComparison:
+    """Tests for stablecoin comparison analysis functions."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(transactions=st.lists(valid_transaction(), min_size=0, max_size=50))
+    def test_property_4_volume_calculation_consistency(self, transactions):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 4: Volume calculation consistency**
+
+        For any transactions DataFrame, the sum of volumes by activity type
+        SHALL equal the sum of volumes by stablecoin SHALL equal the sum of
+        volumes by chain SHALL equal total volume.
+
+        **Validates: Requirements 2.3, 3.1, 6.1**
+        """
+        import pandas as pd
+        from stablecoin_analysis_functions import (
+            calculate_volume_by_dimension,
+        )
+
+        # Convert transactions to DataFrame
+        if not transactions:
+            df = pd.DataFrame(columns=[
+                "transaction_hash", "block_number", "timestamp",
+                "from_address", "to_address", "amount", "stablecoin",
+                "chain", "activity_type", "source_explorer"
+            ])
+        else:
+            df = pd.DataFrame(transactions)
+            # Convert amount strings to Decimal
+            df["amount"] = df["amount"].apply(Decimal)
+
+        # Calculate total volume directly
+        total_volume = Decimal("0")
+        if not df.empty:
+            for amt in df["amount"].dropna():
+                total_volume += amt
+
+        # Calculate volumes by each dimension
+        vol_by_activity = calculate_volume_by_dimension(df, "activity_type")
+        vol_by_stablecoin = calculate_volume_by_dimension(df, "stablecoin")
+        vol_by_chain = calculate_volume_by_dimension(df, "chain")
+
+        # Sum volumes for each dimension
+        sum_by_activity = sum(vol_by_activity.values())
+        sum_by_stablecoin = sum(vol_by_stablecoin.values())
+        sum_by_chain = sum(vol_by_chain.values())
+
+        # All sums should equal total volume
+        assert sum_by_activity == total_volume, (
+            f"Sum of volumes by activity_type ({sum_by_activity}) "
+            f"!= total volume ({total_volume})"
+        )
+        assert sum_by_stablecoin == total_volume, (
+            f"Sum of volumes by stablecoin ({sum_by_stablecoin}) "
+            f"!= total volume ({total_volume})"
+        )
+        assert sum_by_chain == total_volume, (
+            f"Sum of volumes by chain ({sum_by_chain}) "
+            f"!= total volume ({total_volume})"
+        )
+
+        # Cross-check: all dimension sums should be equal
+        assert sum_by_activity == sum_by_stablecoin == sum_by_chain, (
+            f"Volume sums differ: activity={sum_by_activity}, "
+            f"stablecoin={sum_by_stablecoin}, chain={sum_by_chain}"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(transactions=st.lists(valid_transaction(), min_size=1, max_size=50))
+    def test_property_5_average_calculation_correctness(self, transactions):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 5: Average calculation correctness**
+
+        For any non-empty group of transactions, the calculated average
+        transaction size SHALL equal the sum of amounts divided by the
+        count of transactions.
+
+        **Validates: Requirements 3.3, 6.3**
+        """
+        import pandas as pd
+        from stablecoin_analysis_functions import (
+            calculate_average_transaction_size,
+            analyze_by_stablecoin,
+        )
+
+        # Convert transactions to DataFrame
+        df = pd.DataFrame(transactions)
+        # Convert amount strings to Decimal
+        df["amount"] = df["amount"].apply(Decimal)
+
+        # Test overall average
+        total_sum = sum(df["amount"].dropna())
+        count = len(df["amount"].dropna())
+        expected_avg = total_sum / count if count > 0 else Decimal("0")
+
+        avg_result = calculate_average_transaction_size(df)
+        assert "total" in avg_result, "Expected 'total' key in result"
+        assert avg_result["total"] == expected_avg, (
+            f"Overall average ({avg_result['total']}) != "
+            f"expected ({expected_avg})"
+        )
+
+        # Test average by stablecoin
+        avg_by_stablecoin = calculate_average_transaction_size(
+            df, group_by="stablecoin"
+        )
+        for coin in df["stablecoin"].unique():
+            coin_df = df[df["stablecoin"] == coin]
+            coin_sum = sum(coin_df["amount"].dropna())
+            coin_count = len(coin_df["amount"].dropna())
+            expected_coin_avg = (
+                coin_sum / coin_count if coin_count > 0 else Decimal("0")
+            )
+            assert coin in avg_by_stablecoin, (
+                f"Expected stablecoin '{coin}' in result"
+            )
+            assert avg_by_stablecoin[coin] == expected_coin_avg, (
+                f"Average for {coin} ({avg_by_stablecoin[coin]}) != "
+                f"expected ({expected_coin_avg})"
+            )
+
+        # Test via analyze_by_stablecoin function
+        comparison = analyze_by_stablecoin(df)
+        for coin in df["stablecoin"].unique():
+            coin_df = df[df["stablecoin"] == coin]
+            coin_sum = sum(coin_df["amount"].dropna())
+            coin_count = len(coin_df)
+            expected_coin_avg = (
+                coin_sum / coin_count if coin_count > 0 else Decimal("0")
+            )
+            assert comparison.by_stablecoin[coin].avg_transaction_size == \
+                expected_coin_avg, (
+                    f"analyze_by_stablecoin avg for {coin} "
+                    f"({comparison.by_stablecoin[coin].avg_transaction_size}) "
+                    f"!= expected ({expected_coin_avg})"
+                )
