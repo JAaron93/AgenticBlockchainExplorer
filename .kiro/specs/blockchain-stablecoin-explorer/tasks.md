@@ -102,8 +102,8 @@
     - Add calculate_holding_period helper method
     - _Requirements: 2.1, 2.5_
 
-- [ ] 8. Implement data aggregation
-  - [ ] 8.1 Create data aggregator
+- [x] 8. Implement data aggregation
+  - [x] 8.1 Create data aggregator
     - Implement DataAggregator class with aggregate method
     - Add deduplicate_transactions logic using transaction hash
     - Implement merge_holder_data to combine data from multiple sources

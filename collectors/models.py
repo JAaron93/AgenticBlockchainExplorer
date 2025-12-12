@@ -97,10 +97,6 @@ class Holder:
             raise ValueError(f"Invalid chain: {self.chain}")
         if self.first_seen > self.last_activity:
             raise ValueError("First seen cannot be after last activity")
-        if self.stablecoin not in ("USDC", "USDT"):
-            raise ValueError(f"Invalid stablecoin: {self.stablecoin}")
-        if self.chain not in ("ethereum", "bsc", "polygon"):
-            raise ValueError(f"Invalid chain: {self.chain}")
     
     def to_dict(self) -> dict:
         """Convert holder to dictionary for JSON serialization."""

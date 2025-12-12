@@ -105,7 +105,8 @@ class ActivityClassifier:
             # Find the most recent outgoing transaction
             last_outgoing = max(outgoing_txs, key=lambda tx: tx.timestamp)
             delta = reference_time - last_outgoing.timestamp
-            return delta.days
+            # Handle negative deltas (future timestamps due to clock skew)
+            return max(0, delta.days)
 
         # No outgoing transactions - check for incoming transactions
         incoming_txs = [
@@ -117,7 +118,8 @@ class ActivityClassifier:
             # Find the first incoming transaction
             first_incoming = min(incoming_txs, key=lambda tx: tx.timestamp)
             delta = reference_time - first_incoming.timestamp
-            return delta.days
+            # Handle negative deltas (future timestamps due to clock skew)
+            return max(0, delta.days)
 
         # No transactions found for this address
         return 0
