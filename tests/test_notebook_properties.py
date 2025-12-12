@@ -16,6 +16,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'notebooks'))
 
 from stablecoin_validation import validate_schema
+from stablecoin_analysis_functions import get_time_series_totals
 
 
 # =============================================================================
@@ -511,6 +512,68 @@ class TestStablecoinComparison:
                 )
 
 
+class TestTimeSeriesAnalysis:
+    """Tests for time series analysis functions."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        transactions=st.lists(valid_transaction(), min_size=0, max_size=50),
+        aggregation=st.sampled_from(["daily", "weekly", "monthly"])
+    )
+    def test_property_8_time_aggregation_preserves_totals(
+        self, transactions, aggregation
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 8: Time aggregation
+        preserves totals**
+
+        For any transactions DataFrame and aggregation period
+        (daily/weekly/monthly), the sum of aggregated counts SHALL equal
+        total transaction count.
+
+        **Validates: Requirements 5.1, 5.4**
+        """
+        import pandas as pd
+        from stablecoin_analysis_functions import get_time_series_totals
+
+        # Convert transactions to DataFrame
+        if not transactions:
+            df = pd.DataFrame(columns=[
+                "transaction_hash", "block_number", "timestamp",
+                "from_address", "to_address", "amount", "stablecoin",
+                "chain", "activity_type", "source_explorer"
+            ])
+        else:
+            df = pd.DataFrame(transactions)
+            # Convert amount strings to Decimal
+            df["amount"] = df["amount"].apply(Decimal)
+
+        # Get time series with totals
+        result = get_time_series_totals(df, aggregation)
+
+        # Verify total count is preserved
+        aggregated_count = result.aggregated_df["transaction_count"].sum()
+        assert aggregated_count == result.total_count, (
+            f"Sum of aggregated counts ({aggregated_count}) "
+            f"!= total count ({result.total_count}) "
+            f"for aggregation '{aggregation}'"
+        )
+
+        # Verify total volume is preserved
+        aggregated_volume = Decimal("0")
+        for vol in result.aggregated_df["volume"]:
+            if isinstance(vol, Decimal):
+                aggregated_volume += vol
+            else:
+                aggregated_volume += Decimal(str(vol))
+
+        assert aggregated_volume == result.total_volume, (
+            f"Sum of aggregated volumes ({aggregated_volume}) "
+            f"!= total volume ({result.total_volume}) "
+            f"for aggregation '{aggregation}'"
+        )
+
+
 class TestHolderAnalysis:
     """Tests for holder behavior analysis functions."""
 
@@ -541,7 +604,9 @@ class TestHolderAnalysis:
             df["balance"] = df["balance"].apply(Decimal)
             # Add holding_period_days if not present
             if "holding_period_days" not in df.columns:
-                df["holding_period_days"] = 0
+                df["holding_period_days"] = (
+                    pd.to_datetime(df["last_activity"]) - pd.to_datetime(df["first_seen"])
+                ).dt.days
 
         total_holders = len(df)
 

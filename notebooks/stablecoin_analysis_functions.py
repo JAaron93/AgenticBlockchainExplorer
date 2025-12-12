@@ -452,7 +452,8 @@ def analyze_holders(
     avg_balance_sov = Decimal("0")
     if len(sov_holders) > 0:
         total_sov_balance = Decimal("0")
-        for bal in sov_holders["balance"].dropna():
+        valid_balances = sov_holders["balance"].dropna()
+        for bal in valid_balances:
             if isinstance(bal, Decimal):
                 total_sov_balance += bal
             else:
@@ -509,7 +510,9 @@ def get_top_holders(
     Requirements: 4.4
     """
     # Validate required columns
-    required_cols = {'address', 'balance', 'stablecoin', 'chain', 'is_store_of_value'}
+    required_cols = {
+        'address', 'balance', 'stablecoin', 'chain', 'is_store_of_value'
+    }
     if not required_cols.issubset(holders_df.columns):
         missing = required_cols - set(holders_df.columns)
         raise ValueError(f"DataFrame missing required columns: {missing}")
@@ -521,7 +524,11 @@ def get_top_holders(
     df = holders_df.copy()
     if not df.empty:
         df["_balance_decimal"] = df["balance"].apply(
-            lambda x: x if isinstance(x, Decimal) else Decimal(str(x)) if x is not None else Decimal("0")
+            lambda x: (
+                x if isinstance(x, Decimal)
+                else Decimal("0") if pd.isna(x)
+                else Decimal(str(x))
+            )
         )
 
     # Sort by balance descending and take top N
@@ -539,3 +546,309 @@ def get_top_holders(
         ))
 
     return top_holders
+
+
+# =============================================================================
+# Time Series Analysis Functions
+# =============================================================================
+
+
+# Valid aggregation periods
+AGGREGATION_PERIODS = ["daily", "weekly", "monthly"]
+
+
+@dataclass
+class TimeSeriesResult:
+    """Time series aggregation result.
+
+    Attributes:
+        aggregated_df: DataFrame with time-aggregated data
+        aggregation: The aggregation period used
+        total_count: Total transaction count (should match sum of aggregated)
+        total_volume: Total volume (should match sum of aggregated)
+    """
+    aggregated_df: pd.DataFrame
+    aggregation: str
+    total_count: int
+    total_volume: Decimal
+
+
+def analyze_time_series(
+    df: pd.DataFrame,
+    aggregation: str = "daily",
+) -> pd.DataFrame:
+    """
+    Create time-series aggregations from transactions DataFrame.
+
+    Aggregates transaction counts and volumes by time period, grouped by
+    activity type and stablecoin.
+
+    Args:
+        df: Transactions DataFrame with 'timestamp', 'amount',
+            'activity_type', and 'stablecoin' columns
+        aggregation: Aggregation period - "daily", "weekly", or "monthly"
+
+    Returns:
+        DataFrame with columns:
+        - period: The time period (date)
+        - activity_type: Activity type
+        - stablecoin: Stablecoin type
+        - transaction_count: Number of transactions in period
+        - volume: Total volume in period
+
+    Requirements: 5.1, 5.4
+    """
+    # Validate aggregation parameter
+    if aggregation not in AGGREGATION_PERIODS:
+        raise ValueError(
+            f"Invalid aggregation '{aggregation}'. "
+            f"Must be one of: {AGGREGATION_PERIODS}"
+        )
+
+    # Validate required columns
+    required_cols = {'timestamp', 'amount', 'activity_type', 'stablecoin'}
+    if not required_cols.issubset(df.columns):
+        missing = required_cols - set(df.columns)
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
+    # Handle empty DataFrame
+    if df.empty:
+        return pd.DataFrame(columns=[
+            'period', 'activity_type', 'stablecoin',
+            'transaction_count', 'volume'
+        ])
+
+    # Create a working copy
+    work_df = df.copy()
+
+    # Ensure timestamp is datetime
+    _ensure_datetime(work_df, 'timestamp')
+
+    # Create period column based on aggregation
+    if aggregation == "daily":
+        work_df['period'] = work_df['timestamp'].dt.date
+    elif aggregation == "weekly":
+        # Use Monday as start of week
+        work_df['period'] = (
+            work_df['timestamp'].dt.to_period('W-MON').dt.start_time.dt.date
+        )
+    elif aggregation == "monthly":
+        work_df['period'] = (
+            work_df['timestamp'].dt.to_period('M').dt.start_time.dt.date
+        )
+
+    # Group by period, activity_type, and stablecoin
+    grouped = work_df.groupby(
+        ['period', 'activity_type', 'stablecoin'],
+        as_index=False
+    ).agg(
+        transaction_count=('timestamp', 'count'),
+        volume=('amount', _sum_decimal_amounts)
+    )
+
+    # Sort by period
+    grouped = grouped.sort_values('period').reset_index(drop=True)
+
+    return grouped
+
+
+def _sum_decimal_amounts(amounts: pd.Series) -> Decimal:
+    """
+    Sum a series of amounts, handling Decimal conversion.
+
+    Args:
+        amounts: Series of amounts (Decimal or numeric)
+
+    Returns:
+        Sum as Decimal
+    """
+    total = Decimal("0")
+    for amt in amounts.dropna():
+        if isinstance(amt, Decimal):
+            total += amt
+        else:
+            total += Decimal(str(amt))
+    return total
+
+
+def _ensure_datetime(df: pd.DataFrame, column: str = 'timestamp') -> None:
+    """
+    Ensure a column is datetime type, converting if necessary.
+
+    Modifies the DataFrame in place.
+
+    Args:
+        df: DataFrame to modify
+        column: Column name to convert
+    """
+    if not pd.api.types.is_datetime64_any_dtype(df[column]):
+        df[column] = pd.to_datetime(df[column], format='ISO8601', utc=True)
+
+
+def get_time_series_totals(
+    df: pd.DataFrame,
+    aggregation: str = "daily",
+) -> TimeSeriesResult:
+    """
+    Get time series aggregation with totals for verification.
+
+    This function wraps analyze_time_series and includes total counts
+    and volumes for property testing verification.
+
+    Args:
+        df: Transactions DataFrame
+        aggregation: Aggregation period
+
+    Returns:
+        TimeSeriesResult with aggregated DataFrame and totals
+
+    Requirements: 5.1, 5.4
+    """
+    aggregated_df = analyze_time_series(df, aggregation)
+
+    # Calculate totals from original data
+    total_count = len(df)
+    total_volume = Decimal("0")
+    if not df.empty and 'amount' in df.columns:
+        for amt in df['amount'].dropna():
+            if isinstance(amt, Decimal):
+                total_volume += amt
+            else:
+                total_volume += Decimal(str(amt))
+
+    return TimeSeriesResult(
+        aggregated_df=aggregated_df,
+        aggregation=aggregation,
+        total_count=total_count,
+        total_volume=total_volume,
+    )
+
+
+def aggregate_time_series_by_activity(
+    df: pd.DataFrame,
+    aggregation: str = "daily",
+) -> pd.DataFrame:
+    """
+    Aggregate time series by activity type only (for line charts).
+
+    Args:
+        df: Transactions DataFrame
+        aggregation: Aggregation period
+
+    Returns:
+        DataFrame with period, activity_type, transaction_count, volume
+
+    Requirements: 5.2
+    """
+    # Validate aggregation parameter
+    if aggregation not in AGGREGATION_PERIODS:
+        raise ValueError(
+            f"Invalid aggregation '{aggregation}'. "
+            f"Must be one of: {AGGREGATION_PERIODS}"
+        )
+
+    # Validate required columns
+    required_cols = {'timestamp', 'amount', 'activity_type'}
+    if not required_cols.issubset(df.columns):
+        missing = required_cols - set(df.columns)
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
+    # Handle empty DataFrame
+    if df.empty:
+        return pd.DataFrame(columns=[
+            'period', 'activity_type', 'transaction_count', 'volume'
+        ])
+
+    # Create a working copy
+    work_df = df.copy()
+
+    # Ensure timestamp is datetime
+    _ensure_datetime(work_df, 'timestamp')
+
+    # Create period column based on aggregation
+    if aggregation == "daily":
+        work_df['period'] = work_df['timestamp'].dt.date
+    elif aggregation == "weekly":
+        work_df['period'] = (
+            work_df['timestamp'].dt.to_period('W-MON').dt.start_time.dt.date
+        )
+    elif aggregation == "monthly":
+        work_df['period'] = (
+            work_df['timestamp'].dt.to_period('M').dt.start_time.dt.date
+        )
+
+    # Group by period and activity_type
+    grouped = work_df.groupby(
+        ['period', 'activity_type'],
+        as_index=False
+    ).agg(
+        transaction_count=('timestamp', 'count'),
+        volume=('amount', _sum_decimal_amounts)
+    )
+
+    return grouped.sort_values('period').reset_index(drop=True)
+
+
+def aggregate_time_series_by_stablecoin(
+    df: pd.DataFrame,
+    aggregation: str = "daily",
+) -> pd.DataFrame:
+    """
+    Aggregate time series by stablecoin only (for line charts).
+
+    Args:
+        df: Transactions DataFrame
+        aggregation: Aggregation period
+
+    Returns:
+        DataFrame with period, stablecoin, transaction_count, volume
+
+    Requirements: 5.3
+    """
+    # Validate aggregation parameter
+    if aggregation not in AGGREGATION_PERIODS:
+        raise ValueError(
+            f"Invalid aggregation '{aggregation}'. "
+            f"Must be one of: {AGGREGATION_PERIODS}"
+        )
+
+    # Validate required columns
+    required_cols = {'timestamp', 'amount', 'stablecoin'}
+    if not required_cols.issubset(df.columns):
+        missing = required_cols - set(df.columns)
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
+    # Handle empty DataFrame
+    if df.empty:
+        return pd.DataFrame(columns=[
+            'period', 'stablecoin', 'transaction_count', 'volume'
+        ])
+
+    # Create a working copy
+    work_df = df.copy()
+
+    # Ensure timestamp is datetime
+    _ensure_datetime(work_df, 'timestamp')
+
+    # Create period column based on aggregation
+    if aggregation == "daily":
+        work_df['period'] = work_df['timestamp'].dt.date
+    elif aggregation == "weekly":
+        work_df['period'] = (
+            work_df['timestamp'].dt.to_period('W-MON').dt.start_time.dt.date
+        )
+    elif aggregation == "monthly":
+        work_df['period'] = (
+            work_df['timestamp'].dt.to_period('M').dt.start_time.dt.date
+        )
+
+    # Group by period and stablecoin
+    grouped = work_df.groupby(
+        ['period', 'stablecoin'],
+        as_index=False
+    ).agg(
+        transaction_count=('timestamp', 'count'),
+        volume=('amount', _sum_decimal_amounts)
+    )
+
+    return grouped.sort_values('period').reset_index(drop=True)

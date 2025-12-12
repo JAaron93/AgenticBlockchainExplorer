@@ -83,16 +83,16 @@
     - Display top holders table with classifications
     - _Requirements: 4.2, 4.4_
 
-- [ ] 6. Implement time series analysis
-  - [ ] 6.1 Create time series aggregation functions
+- [x] 6. Implement time series analysis
+  - [x] 6.1 Create time series aggregation functions
     - Implement `analyze_time_series(df, aggregation) -> pd.DataFrame`
     - Support daily, weekly, monthly aggregations
     - Group by activity type and stablecoin
     - _Requirements: 5.1, 5.4_
-  - [ ] 6.2 Write property test for time aggregation preserves totals
+  - [x] 6.2 Write property test for time aggregation preserves totals
     - **Property 8: Time aggregation preserves totals**
     - **Validates: Requirements 5.1, 5.4**
-  - [ ] 6.3 Create time series visualization cell
+  - [x] 6.3 Create time series visualization cell
     - Implement line chart for transaction count over time
     - Implement line chart for volume over time
     - Add aggregation period selector UI

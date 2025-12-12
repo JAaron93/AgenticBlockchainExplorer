@@ -910,5 +910,245 @@ def display_sov_pie(mo, loaded_data, holder_metrics, sov_pie):
         return sov_pie
 
 
+# =============================================================================
+# Time Series Analysis (Task 6)
+# =============================================================================
+
+
+@app.cell
+def time_series_imports():
+    """Import time series analysis functions."""
+    import sys
+    from pathlib import Path
+
+    # Add notebooks directory to path for imports
+    notebooks_dir = Path(__file__).parent if '__file__' in dir() else Path('.')
+    if str(notebooks_dir) not in sys.path:
+        sys.path.insert(0, str(notebooks_dir))
+
+    from stablecoin_analysis_functions import (
+        analyze_time_series,
+        aggregate_time_series_by_activity,
+        aggregate_time_series_by_stablecoin,
+        AGGREGATION_PERIODS,
+    )
+
+    return (
+        analyze_time_series,
+        aggregate_time_series_by_activity,
+        aggregate_time_series_by_stablecoin,
+        AGGREGATION_PERIODS,
+    )
+
+
+@app.cell
+def time_series_ui(mo, AGGREGATION_PERIODS):
+    """Create UI controls for time series aggregation period."""
+    aggregation_selector = mo.ui.dropdown(
+        options={
+            "Daily": "daily",
+            "Weekly": "weekly",
+            "Monthly": "monthly",
+        },
+        label="Aggregation Period",
+        value="daily",
+    )
+
+    mo.md(f"""
+    ## Time Series Analysis
+
+    Analyze transaction patterns over time with different aggregation periods.
+
+    {aggregation_selector}
+    """)
+
+    return (aggregation_selector,)
+
+
+@app.cell
+def time_series_analysis_cell(
+    loaded_data,
+    aggregation_selector,
+    aggregate_time_series_by_activity,
+    aggregate_time_series_by_stablecoin,
+):
+    """Perform time series analysis based on selected aggregation."""
+    ts_by_activity = None
+    ts_by_stablecoin = None
+
+    if loaded_data is not None and not loaded_data.transactions_df.empty:
+        aggregation = aggregation_selector.value
+        ts_by_activity = aggregate_time_series_by_activity(
+            loaded_data.transactions_df, aggregation
+        )
+        ts_by_stablecoin = aggregate_time_series_by_stablecoin(
+            loaded_data.transactions_df, aggregation
+        )
+
+    return ts_by_activity, ts_by_stablecoin
+
+
+@app.cell
+def time_series_count_chart(
+    mo, alt, pd, loaded_data, ts_by_activity, aggregation_selector
+):
+    """Create line chart for transaction count over time by activity type."""
+    if loaded_data is None or ts_by_activity is None or ts_by_activity.empty:
+        return (None,)
+
+    # Prepare data for chart - convert period to string for Altair
+    chart_df = ts_by_activity.copy()
+    chart_df['period'] = pd.to_datetime(chart_df['period'])
+
+    # Create line chart
+    count_chart = alt.Chart(chart_df).mark_line(point=True).encode(
+        x=alt.X(
+            'period:T',
+            title='Date',
+            axis=alt.Axis(format='%Y-%m-%d')
+        ),
+        y=alt.Y('transaction_count:Q', title='Transaction Count'),
+        color=alt.Color(
+            'activity_type:N',
+            scale=alt.Scale(
+                domain=['transaction', 'store_of_value', 'other'],
+                range=['#4C78A8', '#F58518', '#72B7B2']
+            ),
+            legend=alt.Legend(title='Activity Type')
+        ),
+        tooltip=[
+            alt.Tooltip('period:T', title='Date', format='%Y-%m-%d'),
+            alt.Tooltip('activity_type:N', title='Activity Type'),
+            alt.Tooltip('transaction_count:Q', title='Count', format=','),
+        ]
+    ).properties(
+        title=f'Transaction Count Over Time ({aggregation_selector.value})',
+        width=600,
+        height=300
+    )
+
+    mo.md("### Transaction Count Over Time (by Activity Type)")
+    return (count_chart,)
+
+
+@app.cell
+def display_count_chart(mo, loaded_data, ts_by_activity, count_chart):
+    """Display the transaction count line chart."""
+    if loaded_data is None or ts_by_activity is None or count_chart is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(count_chart)
+    except Exception:
+        return count_chart
+
+
+@app.cell
+def time_series_volume_chart(
+    mo, alt, pd, loaded_data, ts_by_stablecoin, aggregation_selector, Decimal
+):
+    """Create line chart for transaction volume over time by stablecoin."""
+    if (loaded_data is None or ts_by_stablecoin is None or
+            ts_by_stablecoin.empty):
+        return (None,)
+
+    # Prepare data for chart
+    chart_df = ts_by_stablecoin.copy()
+    chart_df['period'] = pd.to_datetime(chart_df['period'])
+    # Convert Decimal volumes to float for Altair
+    chart_df['volume_float'] = chart_df['volume'].apply(
+        lambda x: float(x) if isinstance(x, Decimal) else float(str(x))
+    )
+
+    # Create line chart
+    volume_chart = alt.Chart(chart_df).mark_line(point=True).encode(
+        x=alt.X(
+            'period:T',
+            title='Date',
+            axis=alt.Axis(format='%Y-%m-%d')
+        ),
+        y=alt.Y('volume_float:Q', title='Volume (USD)'),
+        color=alt.Color(
+            'stablecoin:N',
+            scale=alt.Scale(
+                domain=['USDC', 'USDT'],
+                range=['#2775CA', '#26A17B']
+            ),
+            legend=alt.Legend(title='Stablecoin')
+        ),
+        tooltip=[
+            alt.Tooltip('period:T', title='Date', format='%Y-%m-%d'),
+            alt.Tooltip('stablecoin:N', title='Stablecoin'),
+            alt.Tooltip('volume_float:Q', title='Volume', format=',.2f'),
+        ]
+    ).properties(
+        title=f'Transaction Volume Over Time ({aggregation_selector.value})',
+        width=600,
+        height=300
+    )
+
+    mo.md("### Transaction Volume Over Time (by Stablecoin)")
+    return (volume_chart,)
+
+
+@app.cell
+def display_volume_chart(mo, loaded_data, ts_by_stablecoin, volume_chart):
+    """Display the transaction volume line chart."""
+    if loaded_data is None or ts_by_stablecoin is None or volume_chart is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(volume_chart)
+    except Exception:
+        return volume_chart
+
+
+@app.cell
+def time_series_summary(
+    mo, loaded_data, ts_by_activity, ts_by_stablecoin, format_currency, Decimal
+):
+    """Display time series summary statistics."""
+    if loaded_data is None or ts_by_activity is None:
+        return
+
+    if ts_by_activity.empty:
+        mo.md("No time series data available.")
+        return
+
+    # Calculate summary statistics
+    total_periods = ts_by_activity['period'].nunique()
+    total_transactions = ts_by_activity['transaction_count'].sum()
+
+    # Calculate total volume
+    total_volume = Decimal("0")
+    for vol in ts_by_activity['volume']:
+        if isinstance(vol, Decimal):
+            total_volume += vol
+        else:
+            total_volume += Decimal(str(vol))
+
+    # Find peak period by transaction count
+    period_totals = ts_by_activity.groupby('period')['transaction_count'].sum()
+    if not period_totals.empty:
+        peak_period = period_totals.idxmax()
+        peak_count = period_totals.max()
+    else:
+        peak_period = "N/A"
+        peak_count = 0
+
+    mo.md(f"""
+    ### Time Series Summary
+
+    | Metric | Value |
+    |--------|-------|
+    | **Time Periods** | {total_periods} |
+    | **Total Transactions** | {total_transactions:,} |
+    | **Total Volume** | {format_currency(total_volume)} |
+    | **Peak Period** | {peak_period} ({peak_count:,} transactions) |
+    """)
+
+    return
+
+
 if __name__ == "__main__":
     app.run()
