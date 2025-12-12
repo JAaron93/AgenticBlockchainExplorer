@@ -35,23 +35,29 @@ def _configure_logging(level: str = "INFO", fmt: str = "json") -> None:
 
     log_level = getattr(logging, level.upper(), logging.INFO)
 
+    # Get root logger and clear existing handlers
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(log_level)
+
+    # Create handler
+    handler = logging.StreamHandler()
+    handler.setLevel(log_level)
+
     if fmt == "json":
-        log_format = (
-            '{"time": "%(asctime)s", "name": "%(name)s", '
-            '"level": "%(levelname)s", "message": "%(message)s"}'
+        from pythonjsonlogger import jsonlogger
+
+        formatter = jsonlogger.JsonFormatter(
+            "%(asctime)s %(name)s %(levelname)s %(message)s",
+            rename_fields={"asctime": "time", "levelname": "level"},
         )
     else:
-        log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
 
-    # Configure root logger
-    logging.basicConfig(
-        level=log_level,
-        format=log_format,
-        force=True,  # Override any existing configuration
-    )
-
-    # Also set level on root logger explicitly
-    logging.getLogger().setLevel(log_level)
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
 
     logger = logging.getLogger(__name__)
 

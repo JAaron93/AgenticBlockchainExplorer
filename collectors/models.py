@@ -48,6 +48,10 @@ class Transaction:
             raise ValueError(f"Invalid stablecoin: {self.stablecoin}")
         if self.chain not in ("ethereum", "bsc", "polygon"):
             raise ValueError(f"Invalid chain: {self.chain}")
+        if self.gas_used is not None and self.gas_used < 0:
+            raise ValueError("Gas used cannot be negative")
+        if self.gas_price is not None and self.gas_price < 0:
+            raise ValueError("Gas price cannot be negative")
 
 
     def to_dict(self) -> dict:
@@ -71,7 +75,7 @@ class Transaction:
 @dataclass
 class Holder:
     """Represents a stablecoin token holder."""
-    
+
     address: str
     balance: Decimal
     stablecoin: str
@@ -80,13 +84,19 @@ class Holder:
     last_activity: datetime
     is_store_of_value: bool
     source_explorer: str
-    
+
     def __post_init__(self) -> None:
         """Validate holder data after initialization."""
         if not self.address:
             raise ValueError("Address cannot be empty")
         if self.balance < 0:
             raise ValueError("Balance cannot be negative")
+        if self.stablecoin not in ("USDC", "USDT"):
+            raise ValueError(f"Invalid stablecoin: {self.stablecoin}")
+        if self.chain not in ("ethereum", "bsc", "polygon"):
+            raise ValueError(f"Invalid chain: {self.chain}")
+        if self.first_seen > self.last_activity:
+            raise ValueError("First seen cannot be after last activity")
         if self.stablecoin not in ("USDC", "USDT"):
             raise ValueError(f"Invalid stablecoin: {self.stablecoin}")
         if self.chain not in ("ethereum", "bsc", "polygon"):
@@ -124,5 +134,10 @@ class ExplorerData:
     
     @property
     def success(self) -> bool:
-        """Check if collection was successful (has data and no critical errors)."""
-        return self.total_records > 0 or len(self.errors) == 0
+        """Check if collection was successful.
+        
+        Returns True if data was collected, regardless of whether some
+        non-critical errors occurred (partial success is still success).
+        Returns False only if no data was collected.
+        """
+        return self.total_records > 0

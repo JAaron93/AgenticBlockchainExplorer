@@ -94,8 +94,8 @@
     - Handle Polygon-specific response formats
     - _Requirements: 1.1, 1.2, 1.3, 2.2, 2.3, 2.4_
 
-- [ ] 7. Implement activity classification
-  - [ ] 7.1 Create activity classifier
+- [x] 7. Implement activity classification
+  - [x] 7.1 Create activity classifier
     - Implement ActivityClassifier class with classify_transaction method
     - Add logic to identify transaction type based on from/to addresses and amount
     - Implement identify_store_of_value method checking 30-day holding period
