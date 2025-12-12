@@ -98,13 +98,13 @@
     - Add aggregation period selector UI
     - _Requirements: 5.2, 5.3, 5.4_
 
-- [ ] 7. Implement chain comparison analysis
-  - [ ] 7.1 Create chain metrics calculation functions
+- [x] 7. Implement chain comparison analysis
+  - [x] 7.1 Create chain metrics calculation functions
     - Implement `analyze_by_chain(df) -> list[ChainMetrics]`
     - Calculate transaction count, volume, avg size per chain
     - Calculate gas costs and SoV ratio per chain
     - _Requirements: 6.1, 6.3, 6.4_
-  - [ ] 7.2 Create chain comparison visualization cell
+  - [x] 7.2 Create chain comparison visualization cell
     - Implement stacked bar chart for activity distribution per chain
     - Display chain metrics comparison table
     - _Requirements: 6.2_

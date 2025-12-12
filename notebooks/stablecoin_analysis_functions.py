@@ -852,3 +852,245 @@ def aggregate_time_series_by_stablecoin(
     )
 
     return grouped.sort_values('period').reset_index(drop=True)
+
+
+# =============================================================================
+# Chain Comparison Analysis Functions
+# =============================================================================
+
+
+@dataclass
+class ChainMetrics:
+    """Per-chain analysis metrics.
+
+    Attributes:
+        chain: Blockchain network name (ethereum, bsc, polygon)
+        transaction_count: Total number of transactions on this chain
+        total_volume: Total transaction volume on this chain
+        avg_transaction_size: Average transaction size on this chain
+        avg_gas_cost: Average gas cost in native token (ETH/BNB/MATIC),
+                      None if no gas data available
+        sov_ratio: Ratio of store_of_value holders to total holders
+        activity_distribution: Percentage distribution by activity type
+        excluded_gas_count: Number of transactions excluded from gas calculation
+    """
+    chain: str
+    transaction_count: int
+    total_volume: Decimal
+    avg_transaction_size: Decimal
+    avg_gas_cost: Optional[Decimal]
+    sov_ratio: float
+    activity_distribution: Dict[str, float]
+    excluded_gas_count: int = 0
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "chain": self.chain,
+            "transaction_count": self.transaction_count,
+            "total_volume": str(self.total_volume),
+            "avg_transaction_size": str(self.avg_transaction_size),
+            "avg_gas_cost": str(self.avg_gas_cost) if self.avg_gas_cost else None,
+            "sov_ratio": self.sov_ratio,
+            "activity_distribution": self.activity_distribution,
+            "excluded_gas_count": self.excluded_gas_count,
+        }
+
+
+def analyze_by_chain(
+    transactions_df: pd.DataFrame,
+    holders_df: Optional[pd.DataFrame] = None,
+) -> list:
+    """
+    Analyze transactions grouped by blockchain chain.
+
+    Calculates transaction count, volume, average transaction size,
+    average gas cost, and store-of-value ratio for each chain.
+
+    Gas cost is computed as: gas_cost = gas_used × gas_price (in wei),
+    converted to native token units (ETH/BNB/MATIC) by dividing by 10^18.
+    Transactions with null gas_used or gas_price fields are excluded from
+    gas cost calculations.
+
+    Args:
+        transactions_df: DataFrame with transaction data including 'chain',
+                         'amount', 'activity_type', 'gas_used', 'gas_price'
+        holders_df: Optional DataFrame with holder data for SoV ratio
+
+    Returns:
+        List of ChainMetrics objects, one per chain
+
+    Requirements: 6.1, 6.3, 6.4
+    """
+    # Validate required columns
+    required_cols = {'chain', 'amount', 'activity_type'}
+    if not required_cols.issubset(transactions_df.columns):
+        missing = required_cols - set(transactions_df.columns)
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
+    # Initialize metrics for all supported chains
+    chain_metrics: list = []
+
+    for chain in SUPPORTED_CHAINS:
+        chain_mask = transactions_df['chain'] == chain
+        chain_df = transactions_df[chain_mask]
+
+        # Initialize default values
+        tx_count = 0
+        total_volume = Decimal("0")
+        avg_tx_size = Decimal("0")
+        avg_gas_cost: Optional[Decimal] = None
+        sov_ratio = 0.0
+        activity_dist: Dict[str, float] = {at: 0.0 for at in ACTIVITY_TYPES}
+        excluded_gas_count = 0
+
+        if not chain_df.empty:
+            # Transaction count
+            tx_count = len(chain_df)
+
+            # Total volume
+            for amt in chain_df['amount'].dropna():
+                if isinstance(amt, Decimal):
+                    total_volume += amt
+                else:
+                    total_volume += Decimal(str(amt))
+
+            # Average transaction size
+            if tx_count > 0:
+                avg_tx_size = total_volume / tx_count
+
+            # Activity distribution (percentages within this chain)
+            activity_counts = chain_df.groupby('activity_type').size()
+            for at in ACTIVITY_TYPES:
+                if at in activity_counts.index:
+                    activity_dist[at] = activity_counts[at] / tx_count * 100.0
+
+            # Calculate average gas cost
+            # Gas cost = gas_used × gas_price (in wei)
+            # Convert to native token by dividing by 10^18
+            if 'gas_used' in chain_df.columns and 'gas_price' in chain_df.columns:
+                # Filter transactions with valid gas data
+                gas_mask = (
+                    chain_df['gas_used'].notna() &
+                    chain_df['gas_price'].notna()
+                )
+                valid_gas_df = chain_df[gas_mask]
+                excluded_gas_count = len(chain_df) - len(valid_gas_df)
+
+                if not valid_gas_df.empty:
+                    total_gas_cost = Decimal("0")
+                    gas_count = 0
+
+                    for _, row in valid_gas_df.iterrows():
+                        gas_used = row['gas_used']
+                        gas_price = row['gas_price']
+
+                        # Convert to Decimal if needed
+                        if not isinstance(gas_used, (int, float, Decimal)):
+                            try:
+                                gas_used = Decimal(str(gas_used))
+                            except (ValueError, TypeError):
+                                continue
+                        else:
+                            gas_used = Decimal(str(gas_used))
+
+                        if not isinstance(gas_price, (int, float, Decimal)):
+                            try:
+                                gas_price = Decimal(str(gas_price))
+                            except (ValueError, TypeError):
+                                continue
+                        else:
+                            gas_price = Decimal(str(gas_price))
+
+                        # Calculate gas cost in wei, then convert to native token
+                        gas_cost_wei = gas_used * gas_price
+                        gas_cost_native = gas_cost_wei / Decimal("1000000000000000000")
+                        total_gas_cost += gas_cost_native
+                        gas_count += 1
+
+                    if gas_count > 0:
+                        avg_gas_cost = total_gas_cost / gas_count
+            else:
+                # No gas columns, all transactions excluded
+                excluded_gas_count = tx_count
+
+        # Calculate SoV ratio from holders if provided
+        if holders_df is not None and not holders_df.empty:
+            if 'chain' in holders_df.columns and \
+               'is_store_of_value' in holders_df.columns:
+                chain_holders = holders_df[holders_df['chain'] == chain]
+                if len(chain_holders) > 0:
+                    sov_count = chain_holders['is_store_of_value'].sum()
+                    sov_ratio = float(sov_count) / len(chain_holders)
+
+        chain_metrics.append(ChainMetrics(
+            chain=chain,
+            transaction_count=tx_count,
+            total_volume=total_volume,
+            avg_transaction_size=avg_tx_size,
+            avg_gas_cost=avg_gas_cost,
+            sov_ratio=sov_ratio,
+            activity_distribution=activity_dist,
+            excluded_gas_count=excluded_gas_count,
+        ))
+
+    return chain_metrics
+
+
+def get_chain_activity_distribution(
+    transactions_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Get activity type distribution per chain for visualization.
+
+    Returns a DataFrame suitable for creating stacked bar charts.
+
+    Args:
+        transactions_df: DataFrame with 'chain' and 'activity_type' columns
+
+    Returns:
+        DataFrame with columns: chain, activity_type, count, percentage
+
+    Requirements: 6.2
+    """
+    if 'chain' not in transactions_df.columns:
+        raise ValueError("Column 'chain' not found in DataFrame")
+    if 'activity_type' not in transactions_df.columns:
+        raise ValueError("Column 'activity_type' not found in DataFrame")
+
+    if transactions_df.empty:
+        return pd.DataFrame(columns=['chain', 'activity_type', 'count', 'percentage'])
+
+    # Group by chain and activity_type
+    grouped = transactions_df.groupby(
+        ['chain', 'activity_type'],
+        as_index=False
+    ).size()
+    grouped.columns = ['chain', 'activity_type', 'count']
+
+    # Calculate percentage within each chain
+    chain_totals = grouped.groupby('chain')['count'].transform('sum')
+    grouped['percentage'] = (grouped['count'] / chain_totals * 100.0).round(2)
+
+    # Ensure all chain/activity combinations exist
+    result_rows = []
+    for chain in SUPPORTED_CHAINS:
+        for at in ACTIVITY_TYPES:
+            mask = (grouped['chain'] == chain) & (grouped['activity_type'] == at)
+            if mask.any():
+                row = grouped[mask].iloc[0]
+                result_rows.append({
+                    'chain': chain,
+                    'activity_type': at,
+                    'count': int(row['count']),
+                    'percentage': float(row['percentage']),
+                })
+            else:
+                result_rows.append({
+                    'chain': chain,
+                    'activity_type': at,
+                    'count': 0,
+                    'percentage': 0.0,
+                })
+
+    return pd.DataFrame(result_rows)

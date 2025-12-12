@@ -1022,7 +1022,7 @@ def time_series_count_chart(
             alt.Tooltip('transaction_count:Q', title='Count', format=','),
         ]
     ).properties(
-        title=f'Transaction Count Over Time ({aggregation_selector.value})',
+        title=f'Transaction Count Over Time ({aggregation_selector.value.title()})',
         width=600,
         height=300
     )
@@ -1148,6 +1148,452 @@ def time_series_summary(
     """)
 
     return
+
+
+# =============================================================================
+# Chain Comparison Analysis (Task 7)
+# =============================================================================
+
+
+@app.cell
+def chain_analysis_imports():
+    """Import chain analysis functions."""
+    import sys
+    from pathlib import Path
+
+    # Add notebooks directory to path for imports
+    notebooks_dir = Path(__file__).parent if '__file__' in dir() else Path('.')
+    if str(notebooks_dir) not in sys.path:
+        sys.path.insert(0, str(notebooks_dir))
+
+    from stablecoin_analysis_functions import (
+        ChainMetrics,
+        analyze_by_chain,
+        get_chain_activity_distribution,
+        SUPPORTED_CHAINS,
+    )
+
+    return (
+        ChainMetrics,
+        analyze_by_chain,
+        get_chain_activity_distribution,
+        SUPPORTED_CHAINS,
+    )
+
+
+@app.cell
+def chain_analysis_cell(loaded_data, analyze_by_chain):
+    """Analyze transactions grouped by blockchain chain."""
+    chain_metrics = None
+
+    if loaded_data is not None and not loaded_data.transactions_df.empty:
+        chain_metrics = analyze_by_chain(
+            loaded_data.transactions_df,
+            loaded_data.holders_df,
+        )
+
+    return (chain_metrics,)
+
+
+@app.cell
+def chain_metrics_display(mo, loaded_data, chain_metrics, format_currency):
+    """Display chain comparison metrics table."""
+    if loaded_data is None or chain_metrics is None:
+        return
+
+    # Build comparison table
+    rows = []
+    for metrics in chain_metrics:
+        # Format gas cost
+        if metrics.avg_gas_cost is not None:
+            gas_display = f"{float(metrics.avg_gas_cost):.6f}"
+        else:
+            gas_display = "N/A"
+
+        # Gas exclusion note
+        gas_note = ""
+        if metrics.excluded_gas_count > 0:
+            gas_note = f" ({metrics.excluded_gas_count} excluded)"
+
+        rows.append(
+            f"| {metrics.chain.title()} | {metrics.transaction_count:,} | "
+            f"{format_currency(metrics.total_volume)} | "
+            f"{format_currency(metrics.avg_transaction_size)} | "
+            f"{gas_display}{gas_note} | "
+            f"{metrics.sov_ratio * 100:.1f}% |"
+        )
+
+    table_rows = "\n".join(rows)
+
+    # Build activity distribution table
+    activity_rows = []
+    for at in ["transaction", "store_of_value", "other"]:
+        row_values = [at]
+        for metrics in chain_metrics:
+            pct = metrics.activity_distribution.get(at, 0.0)
+            row_values.append(f"{pct:.1f}%")
+        activity_rows.append("| " + " | ".join(row_values) + " |")
+
+    activity_table = "\n".join(activity_rows)
+
+    mo.md(f"""
+    ## Chain Comparison Analysis
+
+    Compare stablecoin usage patterns across different blockchain networks.
+
+    ### Overview by Chain
+
+    | Chain | Transactions | Total Volume | Avg Tx Size | Avg Gas Cost | SoV Ratio |
+    |-------|--------------|--------------|-------------|--------------|-----------|
+    {table_rows}
+
+    **Note:** Gas cost is in native token units (ETH/BNB/MATIC). Transactions with
+    missing gas data are excluded from gas cost calculations.
+
+    ### Activity Type Distribution by Chain
+
+    | Activity Type | Ethereum | BSC | Polygon |
+    |---------------|----------|-----|---------|
+    {activity_table}
+
+    **Note:** SoV Ratio = percentage of holders classified as store-of-value on each chain
+    """)
+
+    return
+
+
+@app.cell
+def chain_stacked_bar_chart(
+    mo, alt, pd, loaded_data, get_chain_activity_distribution
+):
+    """Create stacked bar chart for activity distribution per chain."""
+    if loaded_data is None or loaded_data.transactions_df.empty:
+        return (None,)
+
+    # Get activity distribution data
+    chart_df = get_chain_activity_distribution(loaded_data.transactions_df)
+
+    if chart_df.empty or chart_df['count'].sum() == 0:
+        return (None,)
+
+    # Create stacked bar chart
+    stacked_chart = alt.Chart(chart_df).mark_bar().encode(
+        x=alt.X(
+            'chain:N',
+            title='Blockchain',
+            sort=['ethereum', 'bsc', 'polygon'],
+            axis=alt.Axis(labelAngle=0)
+        ),
+        y=alt.Y(
+            'percentage:Q',
+            title='Percentage (%)',
+            stack='normalize',
+            scale=alt.Scale(domain=[0, 100])
+        ),
+        color=alt.Color(
+            'activity_type:N',
+            scale=alt.Scale(
+                domain=['transaction', 'store_of_value', 'other'],
+                range=['#4C78A8', '#F58518', '#72B7B2']
+            ),
+            legend=alt.Legend(title='Activity Type')
+        ),
+        order=alt.Order(
+            'activity_type:N',
+            sort='ascending'
+        ),
+        tooltip=[
+            alt.Tooltip('chain:N', title='Chain'),
+            alt.Tooltip('activity_type:N', title='Activity Type'),
+            alt.Tooltip('count:Q', title='Count', format=','),
+            alt.Tooltip('percentage:Q', title='Percentage', format='.1f'),
+        ]
+    ).properties(
+        title='Activity Type Distribution by Chain',
+        width=400,
+        height=300
+    )
+
+    mo.md("### Activity Distribution by Chain (Stacked Bar Chart)")
+    return (stacked_chart,)
+
+
+@app.cell
+def display_stacked_chart(
+    mo, loaded_data, get_chain_activity_distribution, stacked_chart
+):
+    """Display the stacked bar chart."""
+    if loaded_data is None or stacked_chart is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(stacked_chart)
+    except Exception:
+        return stacked_chart
+
+
+@app.cell
+def chain_volume_bar_chart(mo, alt, pd, loaded_data, chain_metrics, Decimal):
+    """Create bar chart comparing transaction volume by chain."""
+    if loaded_data is None or chain_metrics is None:
+        return (None,)
+
+    # Prepare data for bar chart
+    chart_data = []
+    for metrics in chain_metrics:
+        if metrics.transaction_count > 0:
+            chart_data.append({
+                'chain': metrics.chain.title(),
+                'volume': float(metrics.total_volume),
+                'transaction_count': metrics.transaction_count,
+            })
+
+    if not chart_data:
+        return (None,)
+
+    chart_df = pd.DataFrame(chart_data)
+
+    # Create bar chart for volume
+    volume_bar = alt.Chart(chart_df).mark_bar().encode(
+        x=alt.X(
+            'chain:N',
+            title='Blockchain',
+            sort=['Ethereum', 'Bsc', 'Polygon']
+        ),
+        y=alt.Y('volume:Q', title='Total Volume (USD)'),
+        color=alt.Color(
+            'chain:N',
+            scale=alt.Scale(
+                domain=['Ethereum', 'Bsc', 'Polygon'],
+                range=['#627EEA', '#F3BA2F', '#8247E5']
+            ),
+            legend=None
+        ),
+        tooltip=[
+            alt.Tooltip('chain:N', title='Chain'),
+            alt.Tooltip('volume:Q', title='Volume', format=',.2f'),
+            alt.Tooltip('transaction_count:Q', title='Transactions', format=','),
+        ]
+    ).properties(
+        title='Transaction Volume by Chain',
+        width=350,
+        height=300
+    )
+
+    mo.md("### Transaction Volume by Chain")
+    return (volume_bar,)
+
+
+@app.cell
+def display_volume_bar(mo, loaded_data, chain_metrics, volume_bar):
+    """Display the volume bar chart."""
+    if loaded_data is None or chain_metrics is None or volume_bar is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(volume_bar)
+    except Exception:
+        return volume_bar
+
+
+@app.cell
+def chain_avg_tx_size_chart(mo, alt, pd, loaded_data, chain_metrics, Decimal):
+    """Create bar chart comparing average transaction size by chain."""
+    if loaded_data is None or chain_metrics is None:
+        return (None,)
+
+    # Prepare data for bar chart
+    chart_data = []
+    for metrics in chain_metrics:
+        if metrics.transaction_count > 0:
+            chart_data.append({
+                'chain': metrics.chain.title(),
+                'avg_tx_size': float(metrics.avg_transaction_size),
+            })
+
+    if not chart_data:
+        return (None,)
+
+    chart_df = pd.DataFrame(chart_data)
+
+    # Create bar chart for average transaction size
+    avg_tx_chart = alt.Chart(chart_df).mark_bar().encode(
+        x=alt.X(
+            'chain:N',
+            title='Blockchain',
+            sort=['Ethereum', 'Bsc', 'Polygon']
+        ),
+        y=alt.Y('avg_tx_size:Q', title='Average Transaction Size (USD)'),
+        color=alt.Color(
+            'chain:N',
+            scale=alt.Scale(
+                domain=['Ethereum', 'Bsc', 'Polygon'],
+                range=['#627EEA', '#F3BA2F', '#8247E5']
+            ),
+            legend=None
+        ),
+        tooltip=[
+            alt.Tooltip('chain:N', title='Chain'),
+            alt.Tooltip('avg_tx_size:Q', title='Avg Tx Size', format=',.2f'),
+        ]
+    ).properties(
+        title='Average Transaction Size by Chain',
+        width=350,
+        height=300
+    )
+
+    mo.md("### Average Transaction Size by Chain")
+    return (avg_tx_chart,)
+
+
+@app.cell
+def display_avg_tx_chart(mo, loaded_data, chain_metrics, avg_tx_chart):
+    """Display the average transaction size chart."""
+    if loaded_data is None or chain_metrics is None or avg_tx_chart is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(avg_tx_chart)
+    except Exception:
+        return avg_tx_chart
+
+
+@app.cell
+def chain_gas_cost_chart(mo, alt, pd, loaded_data, chain_metrics):
+    """Create bar chart comparing average gas cost by chain."""
+    if loaded_data is None or chain_metrics is None:
+        return (None,)
+
+    # Prepare data for bar chart - only include chains with gas data
+    chart_data = []
+    for metrics in chain_metrics:
+        if metrics.avg_gas_cost is not None:
+            chart_data.append({
+                'chain': metrics.chain.title(),
+                'avg_gas_cost': float(metrics.avg_gas_cost),
+                'excluded_count': metrics.excluded_gas_count,
+            })
+
+    if not chart_data:
+        mo.md("""
+        ### Average Gas Cost by Chain
+
+        *No gas cost data available. Transactions may be missing gas_used or
+        gas_price fields.*
+        """)
+        return (None,)
+
+    chart_df = pd.DataFrame(chart_data)
+
+    # Create bar chart for gas cost
+    gas_chart = alt.Chart(chart_df).mark_bar().encode(
+        x=alt.X(
+            'chain:N',
+            title='Blockchain',
+            sort=['Ethereum', 'Bsc', 'Polygon']
+        ),
+        y=alt.Y(
+            'avg_gas_cost:Q',
+            title='Average Gas Cost (Native Token)'
+        ),
+        color=alt.Color(
+            'chain:N',
+            scale=alt.Scale(
+                domain=['Ethereum', 'Bsc', 'Polygon'],
+                range=['#627EEA', '#F3BA2F', '#8247E5']
+            ),
+            legend=None
+        ),
+        tooltip=[
+            alt.Tooltip('chain:N', title='Chain'),
+            alt.Tooltip('avg_gas_cost:Q', title='Avg Gas Cost', format='.6f'),
+            alt.Tooltip('excluded_count:Q', title='Excluded Txs', format=','),
+        ]
+    ).properties(
+        title='Average Gas Cost by Chain (in Native Token)',
+        width=350,
+        height=300
+    )
+
+    mo.md("### Average Gas Cost by Chain")
+    return (gas_chart,)
+
+
+@app.cell
+def display_gas_chart(mo, loaded_data, chain_metrics, gas_chart):
+    """Display the gas cost chart."""
+    if loaded_data is None or chain_metrics is None or gas_chart is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(gas_chart)
+    except Exception:
+        return gas_chart
+
+
+@app.cell
+def chain_sov_ratio_chart(mo, alt, pd, loaded_data, chain_metrics):
+    """Create bar chart comparing SoV ratio by chain."""
+    if loaded_data is None or chain_metrics is None:
+        return (None,)
+
+    # Prepare data for bar chart
+    chart_data = []
+    for metrics in chain_metrics:
+        chart_data.append({
+            'chain': metrics.chain.title(),
+            'sov_ratio': metrics.sov_ratio * 100,  # Convert to percentage
+        })
+
+    if not chart_data:
+        return (None,)
+
+    chart_df = pd.DataFrame(chart_data)
+
+    # Create bar chart for SoV ratio
+    sov_chart = alt.Chart(chart_df).mark_bar().encode(
+        x=alt.X(
+            'chain:N',
+            title='Blockchain',
+            sort=['Ethereum', 'Bsc', 'Polygon']
+        ),
+        y=alt.Y(
+            'sov_ratio:Q',
+            title='Store of Value Ratio (%)',
+            scale=alt.Scale(domain=[0, 100])
+        ),
+        color=alt.Color(
+            'chain:N',
+            scale=alt.Scale(
+                domain=['Ethereum', 'Bsc', 'Polygon'],
+                range=['#627EEA', '#F3BA2F', '#8247E5']
+            ),
+            legend=None
+        ),
+        tooltip=[
+            alt.Tooltip('chain:N', title='Chain'),
+            alt.Tooltip('sov_ratio:Q', title='SoV Ratio', format='.1f'),
+        ]
+    ).properties(
+        title='Store of Value Ratio by Chain',
+        width=350,
+        height=300
+    )
+
+    mo.md("### Store of Value Ratio by Chain")
+    return (sov_chart,)
+
+
+@app.cell
+def display_sov_chart(mo, loaded_data, chain_metrics, sov_chart):
+    """Display the SoV ratio chart."""
+    if loaded_data is None or chain_metrics is None or sov_chart is None:
+        return
+
+    try:
+        return mo.ui.altair_chart(sov_chart)
+    except Exception:
+        return sov_chart
 
 
 if __name__ == "__main__":
