@@ -224,7 +224,7 @@ async def callback(
         )
     
     # Validate state parameter (CSRF protection)
-    if state and not _validate_state(state):
+    if not state or not _validate_state(state):
         logger.warning("Invalid or expired OAuth state")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -305,36 +305,44 @@ async def run_agent_task(
     run_id: str,
     user_id: str,
     config: Optional[Dict[str, Any]],
-    db_manager: DatabaseManager,
 ) -> None:
     """Background task to run the agent.
-    
+
+    Creates its own database connection to avoid using request-scoped
+    resources that may be closed when the background task runs.
+
     This is a placeholder that will be replaced with actual agent
     orchestration when the collector components are implemented.
     """
+    # Create a fresh database manager for this background task
+    db = get_database()
+    db_manager = DatabaseManager(db)
+
     try:
         # Update status to running
         await db_manager.update_run_status(run_id, "running")
-        await db_manager.update_run_progress(run_id, 0.0, "Starting data collection...")
-        
+        await db_manager.update_run_progress(
+            run_id, 0.0, "Starting data collection..."
+        )
+
         # TODO: Implement actual agent orchestration
         # For now, this is a placeholder that simulates progress
         logger.info(f"Agent run {run_id} started for user {user_id}")
-        
+
         # The actual implementation will:
         # 1. Initialize collectors for each explorer
         # 2. Fetch stablecoin transactions in parallel
         # 3. Classify activities
         # 4. Aggregate and deduplicate data
         # 5. Export to JSON and save to database
-        
+
         # Placeholder: Mark as completed with no results
         # This will be replaced when collectors are implemented
         await db_manager.update_run_progress(run_id, 1.0, "Collection complete")
         await db_manager.update_run_status(run_id, "completed")
-        
+
         logger.info(f"Agent run {run_id} completed")
-        
+
     except Exception as e:
         logger.error(f"Agent run {run_id} failed: {e}")
         await db_manager.update_run_status(
@@ -379,12 +387,14 @@ async def trigger_agent_run(
     )
     
     # Start the agent in background
+    # Note: We don't pass db_manager here because it's request-scoped
+    # and may be closed when the background task runs. The task creates
+    # its own database manager.
     background_tasks.add_task(
         run_agent_task,
         run_id=run_id,
         user_id=user.user_id,
         config=run_config,
-        db_manager=db_manager,
     )
     
     started_at = datetime.now(timezone.utc).isoformat()

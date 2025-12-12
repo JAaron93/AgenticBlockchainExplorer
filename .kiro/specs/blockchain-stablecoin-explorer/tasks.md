@@ -66,28 +66,28 @@
     - Add GET /api/results/{run_id}/download to serve JSON file
     - _Requirements: 3.5, 4.2_
 
-- [ ] 6. Implement blockchain explorer collectors
-  - [ ] 6.1 Create base collector class
+- [x] 6. Implement blockchain explorer collectors
+  - [x] 6.1 Create base collector class
     - Define ExplorerCollector abstract base class
     - Implement common methods: handle_rate_limit, validate_response
     - Add retry logic with exponential backoff
     - _Requirements: 1.4, 4.1, 4.5_
   
-  - [ ] 6.2 Implement Etherscan collector
+  - [x] 6.2 Implement Etherscan collector
     - Create EtherscanCollector class extending ExplorerCollector
     - Implement fetch_stablecoin_transactions using Etherscan API
     - Implement fetch_token_holders method
     - Parse API responses into Transaction and Holder models
     - _Requirements: 1.1, 1.2, 1.3, 2.2, 2.3, 2.4_
   
-  - [ ] 6.3 Implement BscScan collector
+  - [x] 6.3 Implement BscScan collector
     - Create BscscanCollector class extending ExplorerCollector
     - Implement fetch_stablecoin_transactions using BscScan API
     - Implement fetch_token_holders method
     - Handle BSC-specific response formats
     - _Requirements: 1.1, 1.2, 1.3, 2.2, 2.3, 2.4_
   
-  - [ ] 6.4 Implement Polygonscan collector
+  - [x] 6.4 Implement Polygonscan collector
     - Create PolygonscanCollector class extending ExplorerCollector
     - Implement fetch_stablecoin_transactions using Polygonscan API
     - Implement fetch_token_holders method
