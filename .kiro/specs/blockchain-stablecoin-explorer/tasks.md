@@ -33,14 +33,14 @@
     - Add get_user_runs, get_run_details, log_user_action methods
     - _Requirements: 4.2, 4.4_
 
-- [ ] 4. Implement Auth0 integration
-  - [ ] 4.1 Create Auth0 manager
+- [x] 4. Implement Auth0 integration
+  - [x] 4.1 Create Auth0 manager
     - Implement Auth0Manager class with token verification using python-jose
     - Add methods for verify_token, get_user_permissions, check_permission
     - Handle token expiration and validation errors
     - _Requirements: 4.1, 4.3_
   
-  - [ ] 4.2 Create authentication middleware
+  - [x] 4.2 Create authentication middleware
     - Write FastAPI dependency for requires_auth decorator
     - Implement JWT token extraction from Authorization header
     - Add permission checking logic
