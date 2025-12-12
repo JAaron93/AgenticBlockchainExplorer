@@ -188,7 +188,7 @@ async def init_database(config: DatabaseConfig) -> DatabaseConnection:
     configuration is provided, the old connection is gracefully closed
     before creating a new one.
 
-    Thread-safe via asyncio.Lock to prevent races during concurrent calls.
+    Concurrency-safe via asyncio.Lock to prevent races during concurrent coroutine calls.
 
     Args:
         config: Database configuration.
@@ -201,7 +201,9 @@ async def init_database(config: DatabaseConfig) -> DatabaseConnection:
     async with _get_lock():
         # Return existing connection if it matches the config
         if _db_connection is not None:
-            if _db_connection._config.url == config.url:
+            if (_db_connection._config.url == config.url and
+                _db_connection._config.pool_size == config.pool_size and
+                _db_connection._config.max_overflow == config.max_overflow):
                 logger.debug("Returning existing database connection")
                 return _db_connection
 
@@ -212,6 +214,7 @@ async def init_database(config: DatabaseConfig) -> DatabaseConnection:
 
         # Create new connection
         _db_connection = DatabaseConnection(config)
+        await _db_connection.connect()
         return _db_connection
 
 

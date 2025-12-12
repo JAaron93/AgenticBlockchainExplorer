@@ -4,7 +4,7 @@ Defines the database schema for users, agent_runs, run_results, and audit_logs t
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from enum import Enum as PyEnum
 
@@ -120,7 +120,7 @@ class RunResult(Base):
     output_file_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     summary: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     
     # Relationships

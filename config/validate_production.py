@@ -52,7 +52,7 @@ def validate_production_config(config_path: str = "./config.json") -> Tuple[bool
     
     # Check cookie_samesite
     samesite = config.get("session", {}).get("cookie_samesite")
-    if samesite and samesite.lower() not in ["strict", "lax"]:
+    if samesite and isinstance(samesite, str) and samesite.lower() not in ["strict", "lax"]:
         issues.append("⚠️  session.cookie_samesite should be 'strict' or 'lax' for production")
     
     # Check CORS origins
@@ -62,6 +62,7 @@ def validate_production_config(config_path: str = "./config.json") -> Tuple[bool
     else:
         for origin in cors_origins:
             if not isinstance(origin, str):
+                issues.append(f"❌ CORS origin must be a string, got {type(origin).__name__}")
                 continue
             if "localhost" in origin or "127.0.0.1" in origin:
                 issues.append(f"❌ CORS origin contains localhost: {origin}")
@@ -93,12 +94,13 @@ def validate_production_config(config_path: str = "./config.json") -> Tuple[bool
     explorers = config.get("explorers", [])
     if not isinstance(explorers, list):
         issues.append("❌ explorers must be a list")
-    else:
         for explorer in explorers:
             if not isinstance(explorer, dict):
+                issues.append("❌ Each explorer entry must be a dictionary")
                 continue
             api_key = explorer.get("api_key", "")
             if not isinstance(api_key, str) or "YOUR_" in api_key or not api_key:
+                issues.append(f"❌ {explorer.get('name', 'Unknown')} API key is a placeholder")
                 issues.append(f"❌ {explorer.get('name', 'Unknown')} API key is a placeholder")
     
     return len(issues) == 0, issues

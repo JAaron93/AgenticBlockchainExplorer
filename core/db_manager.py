@@ -200,7 +200,7 @@ class DatabaseManager:
         async with self._db.session() as session:
             values: Dict[str, Any] = {"status": validated_status}
 
-            if status in ("completed", "failed"):
+            if validated_status in (RunStatus.COMPLETED, RunStatus.FAILED):
                 values["completed_at"] = datetime.now(timezone.utc)
 
             if error_message:
@@ -324,7 +324,7 @@ class DatabaseManager:
                     "explorers_queried": result.explorers_queried,
                     "output_file_path": result.output_file_path,
                     "summary": result.summary,
-                    "created_at": result.created_at.isoformat()
+                    "created_at": result.created_at.isoformat() if result.created_at else None
                 } if result else None
             }
 

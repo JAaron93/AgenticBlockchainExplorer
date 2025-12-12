@@ -10,12 +10,13 @@ def redact_database_url(url: str) -> str:
     try:
         parsed = urlparse(url)
         if parsed.username and parsed.password:
-            # Show username but mask password
-            redacted_netloc = f"{parsed.username}:****@{parsed.hostname}"
+            # Mask both username and password
+            redacted_netloc = f"****:****@{parsed.hostname}"
             if parsed.port:
                 redacted_netloc += f":{parsed.port}"
         elif parsed.username:
-            redacted_netloc = f"{parsed.username}@{parsed.hostname}"
+            # Mask username even if no password
+            redacted_netloc = f"****@{parsed.hostname}"
             if parsed.port:
                 redacted_netloc += f":{parsed.port}"
         else:

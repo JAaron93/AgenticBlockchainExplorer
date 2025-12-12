@@ -27,21 +27,31 @@ target_metadata = Base.metadata
 
 
 def get_database_url() -> str:
-    """Get database URL from environment variable or config file.
+    """Get database URL from DATABASE_URL environment variable.
+
+    The DATABASE_URL environment variable is required. This ensures no
+    credentials are hardcoded in alembic.ini or committed to source control.
 
     Returns:
         Database URL string.
-    """
-    # First try environment variable
-    url = os.environ.get("DATABASE_URL")
-    if url:
-        return url
 
-    # Fall back to alembic.ini configuration
-    ini_url = config.get_main_option("sqlalchemy.url")
-    if ini_url is None:
-        raise RuntimeError("No database URL configured")
-    return ini_url
+    Raises:
+        RuntimeError: If DATABASE_URL environment variable is not set.
+    """
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL environment variable is required. "
+            "Set it before running Alembic migrations. "
+            "Example: export DATABASE_URL="
+            '"postgresql://user:pass@localhost:5432/dbname"'
+        )
+
+    # Handle Heroku postgres:// URLs (need postgresql:// for SQLAlchemy 1.4+)
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+
+    return url
 
 
 def run_migrations_offline() -> None:
