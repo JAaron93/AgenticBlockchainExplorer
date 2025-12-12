@@ -1018,6 +1018,13 @@ def analyze_by_chain(
         if holders_df is not None and not holders_df.empty:
             if 'chain' in holders_df.columns and \
                'is_store_of_value' in holders_df.columns:
+                # Validate is_store_of_value is boolean or numeric
+                if not (pd.api.types.is_bool_dtype(holders_df['is_store_of_value']) or 
+                        pd.api.types.is_numeric_dtype(holders_df['is_store_of_value'])):
+                    raise ValueError(
+                        f"Column 'is_store_of_value' must be boolean or numeric, "
+                        f"got {holders_df['is_store_of_value'].dtype}"
+                    )
                 chain_holders = holders_df[holders_df['chain'] == chain]
                 if len(chain_holders) > 0:
                     sov_count = chain_holders['is_store_of_value'].sum()
@@ -1094,3 +1101,394 @@ def get_chain_activity_distribution(
                 })
 
     return pd.DataFrame(result_rows)
+
+
+
+# =============================================================================
+# Conclusion Generation Functions
+# =============================================================================
+
+
+from enum import Enum
+from typing import List
+
+
+class ConfidenceLevel(str, Enum):
+    """Confidence level for analysis conclusions.
+    
+    Inherits from str to enable JSON serialization as string values.
+    Use .value for string representation, e.g., ConfidenceLevel.HIGH.value == "high"
+    """
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    
+    @classmethod
+    def from_score(cls, score: float) -> "ConfidenceLevel":
+        """Map confidence score to level based on thresholds.
+        
+        Args:
+            score: Confidence score between 0.0 and 1.0
+            
+        Returns:
+            ConfidenceLevel.HIGH if score >= 0.85
+            ConfidenceLevel.MEDIUM if 0.50 <= score < 0.85
+            ConfidenceLevel.LOW if score < 0.50
+        """
+        if score >= 0.85:
+            return cls.HIGH
+        elif score >= 0.50:
+            return cls.MEDIUM
+        else:
+            return cls.LOW
+
+
+# System constant: supported chains (fixed requirement)
+SUPPORTED_CHAIN_COUNT: int = 3  # ethereum, bsc, polygon
+
+
+@dataclass
+class ConfidenceMetrics:
+    """Metrics used for confidence calculation.
+    
+    Attributes:
+        sample_size: Number of transactions in the dataset
+        field_completeness: Percentage of non-null required fields (0.0-1.0)
+        chain_coverage: chains_with_data / SUPPORTED_CHAIN_COUNT (0.0-1.0)
+        chains_with_data: Count of unique chains present in dataset
+        completeness_percent: Combined completeness (0.7*field + 0.3*chain)
+        confidence_score: Final confidence score (0.0-1.0)
+        confidence_level: Mapped confidence level (HIGH/MEDIUM/LOW)
+    """
+    sample_size: int
+    field_completeness: float
+    chain_coverage: float
+    chains_with_data: int
+    completeness_percent: float
+    confidence_score: float
+    confidence_level: ConfidenceLevel
+    
+    def to_dict(self) -> dict:
+        """Serialize to dictionary with confidence_level as string value."""
+        return {
+            "sample_size": self.sample_size,
+            "field_completeness": self.field_completeness,
+            "chain_coverage": self.chain_coverage,
+            "chains_with_data": self.chains_with_data,
+            "completeness_percent": self.completeness_percent,
+            "confidence_score": self.confidence_score,
+            "confidence_level": self.confidence_level.value,
+        }
+
+
+@dataclass
+class Conclusion:
+    """Analysis conclusion with confidence.
+    
+    Attributes:
+        finding: Short description of the finding
+        value: The value or result of the finding
+        confidence: Confidence level for this conclusion
+        explanation: Detailed explanation of the finding
+    """
+    finding: str
+    value: str
+    confidence: ConfidenceLevel
+    explanation: str
+    
+    def to_dict(self) -> dict:
+        """Serialize to dictionary with confidence as string value."""
+        return {
+            "finding": self.finding,
+            "value": self.value,
+            "confidence": self.confidence.value,
+            "explanation": self.explanation,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "Conclusion":
+        """Deserialize from dictionary, mapping string to ConfidenceLevel."""
+        return cls(
+            finding=data["finding"],
+            value=data["value"],
+            confidence=ConfidenceLevel(data["confidence"]),
+            explanation=data["explanation"],
+        )
+
+
+def calculate_field_completeness(transactions_df: pd.DataFrame) -> float:
+    """
+    Calculate the percentage of non-null required fields.
+    
+    Required fields: transaction_hash, timestamp, amount, stablecoin,
+                     chain, activity_type
+    
+    Args:
+        transactions_df: DataFrame with transaction data
+    
+    Returns:
+        Percentage of non-null required fields (0.0 to 1.0)
+    """
+    if transactions_df.empty:
+        return 0.0
+    
+    required_fields = [
+        "transaction_hash", "timestamp", "amount",
+        "stablecoin", "chain", "activity_type"
+    ]
+    
+    # Count non-null values for each required field
+    total_cells = 0
+    non_null_cells = 0
+    
+    for field in required_fields:
+        if field in transactions_df.columns:
+            total_cells += len(transactions_df)
+            non_null_cells += transactions_df[field].notna().sum()
+        else:
+            # Field is missing entirely
+            total_cells += len(transactions_df)
+    
+    if total_cells == 0:
+        return 0.0
+    
+    return non_null_cells / total_cells
+
+
+def calculate_confidence(
+    transactions_df: pd.DataFrame,
+) -> ConfidenceMetrics:
+    """
+    Calculate confidence level based on data quality.
+    
+    Formula:
+        field_completeness = non_null_required_fields / total_required_fields
+        chain_coverage = chains_with_data / 3
+        completeness_percent = 0.7 * field_completeness + 0.3 * chain_coverage
+        normalized_sample_size = min(sample_size / 1000, 1.0)
+        confidence_score = 0.6 * normalized_sample_size + 0.4 * completeness_percent
+    
+    Thresholds:
+        HIGH: score >= 0.85
+        MEDIUM: 0.50 <= score < 0.85
+        LOW: score < 0.50
+    
+    Args:
+        transactions_df: DataFrame with transaction data
+    
+    Returns:
+        ConfidenceMetrics with all component values and final confidence_level
+    
+    Requirements: 7.3
+    """
+    sample_size = len(transactions_df)
+    
+    # Calculate field completeness
+    field_completeness = calculate_field_completeness(transactions_df)
+    
+    # Calculate chain coverage
+    if not transactions_df.empty and "chain" in transactions_df.columns:
+        chains_with_data = transactions_df["chain"].dropna().nunique()
+    else:
+        chains_with_data = 0
+    
+    chain_coverage = chains_with_data / SUPPORTED_CHAIN_COUNT
+    
+    # Calculate combined completeness
+    completeness_percent = 0.7 * field_completeness + 0.3 * chain_coverage
+    
+    # Calculate normalized sample size
+    normalized_sample_size = min(sample_size / 1000, 1.0)
+    
+    # Calculate final confidence score
+    confidence_score = 0.6 * normalized_sample_size + 0.4 * completeness_percent
+    
+    # Map to confidence level
+    confidence_level = ConfidenceLevel.from_score(confidence_score)
+    
+    return ConfidenceMetrics(
+        sample_size=sample_size,
+        field_completeness=field_completeness,
+        chain_coverage=chain_coverage,
+        chains_with_data=chains_with_data,
+        completeness_percent=completeness_percent,
+        confidence_score=confidence_score,
+        confidence_level=confidence_level,
+    )
+
+
+def generate_conclusions(
+    activity_breakdown: ActivityBreakdown,
+    holder_metrics: HolderMetrics,
+    chain_metrics: List[ChainMetrics],
+    confidence_metrics: ConfidenceMetrics,
+    errors: List[str],
+) -> List[Conclusion]:
+    """
+    Generate summary conclusions from analysis results.
+    
+    Calculates overall transaction vs SoV ratio and identifies key findings.
+    
+    Args:
+        activity_breakdown: Activity type distribution metrics
+        holder_metrics: Holder behavior metrics
+        chain_metrics: Per-chain analysis metrics
+        confidence_metrics: Data quality confidence metrics
+        errors: List of data collection errors
+    
+    Returns:
+        List of Conclusion objects with findings and confidence levels
+    
+    Requirements: 7.1, 7.2
+    """
+    conclusions: List[Conclusion] = []
+    confidence = confidence_metrics.confidence_level
+    
+    # 1. Dominant usage pattern (transaction vs store_of_value)
+    tx_count = activity_breakdown.counts.get("transaction", 0)
+    sov_count = activity_breakdown.counts.get("store_of_value", 0)
+    total_activity = tx_count + sov_count
+    
+    if total_activity > 0:
+        tx_ratio = tx_count / total_activity
+        sov_ratio = sov_count / total_activity
+        
+        if tx_ratio > sov_ratio:
+            dominant = "Transaction"
+            ratio_str = f"{tx_ratio:.1%} transactions vs {sov_ratio:.1%} store-of-value"
+        else:
+            dominant = "Store of Value"
+            ratio_str = f"{sov_ratio:.1%} store-of-value vs {tx_ratio:.1%} transactions"
+        
+        conclusions.append(Conclusion(
+            finding="Dominant Usage Pattern",
+            value=dominant,
+            confidence=confidence,
+            explanation=f"Based on activity type distribution: {ratio_str}",
+        ))
+    
+    # 2. Holder behavior pattern
+    if holder_metrics.total_holders > 0:
+        sov_pct = holder_metrics.sov_percentage
+        active_pct = 100.0 - sov_pct
+        
+        if sov_pct > active_pct:
+            holder_pattern = "Store of Value"
+            pattern_str = f"{sov_pct:.1f}% holders are store-of-value"
+        else:
+            holder_pattern = "Active Transactors"
+            pattern_str = f"{active_pct:.1f}% holders are active transactors"
+        
+        conclusions.append(Conclusion(
+            finding="Holder Behavior Pattern",
+            value=holder_pattern,
+            confidence=confidence,
+            explanation=pattern_str,
+        ))
+    
+    # 3. Chain with highest transaction activity
+    if chain_metrics:
+        highest_chain = max(chain_metrics, key=lambda c: c.transaction_count)
+        if highest_chain.transaction_count > 0:
+            conclusions.append(Conclusion(
+                finding="Most Active Chain",
+                value=highest_chain.chain.capitalize(),
+                confidence=confidence,
+                explanation=(
+                    f"{highest_chain.chain.capitalize()} has "
+                    f"{highest_chain.transaction_count:,} transactions"
+                ),
+            ))
+    
+    # 4. Stablecoin with highest SoV ratio
+    if chain_metrics:
+        chains_with_sov = [c for c in chain_metrics if c.sov_ratio > 0]
+        if chains_with_sov:
+            highest_sov_chain = max(chains_with_sov, key=lambda c: c.sov_ratio)
+            conclusions.append(Conclusion(
+                finding="Highest Store-of-Value Ratio",
+                value=highest_sov_chain.chain.capitalize(),
+                confidence=confidence,
+                explanation=(
+                    f"{highest_sov_chain.chain.capitalize()} has "
+                    f"{highest_sov_chain.sov_ratio:.1%} store-of-value ratio"
+                ),
+            ))
+    
+    # 5. Data quality warning if errors present
+    if errors:
+        conclusions.append(Conclusion(
+            finding="Data Quality Warning",
+            value=f"{len(errors)} error(s) detected",
+            confidence=ConfidenceLevel.LOW,
+            explanation=(
+                "Data collection encountered errors that may affect "
+                "the accuracy of conclusions. Review the errors list "
+                "for details."
+            ),
+        ))
+    
+    return conclusions
+
+
+def get_data_quality_warnings(
+    errors: List[str],
+    confidence_metrics: ConfidenceMetrics,
+) -> List[str]:
+    """
+    Generate data quality warnings based on errors and confidence.
+    
+    Args:
+        errors: List of data collection errors
+        confidence_metrics: Data quality confidence metrics
+    
+    Returns:
+        List of warning messages
+    
+    Requirements: 7.4
+    """
+    warnings: List[str] = []
+    
+    # Add warnings for collection errors
+    if errors:
+        warnings.append(
+            f"Data collection reported {len(errors)} error(s). "
+            "Results may be incomplete."
+        )
+        # Add first few errors as specific warnings
+        for error in errors[:3]:
+            warnings.append(f"Collection error: {error}")
+        if len(errors) > 3:
+            warnings.append(f"... and {len(errors) - 3} more error(s)")
+    
+    # Add warnings for low confidence
+    if confidence_metrics.confidence_level == ConfidenceLevel.LOW:
+        warnings.append(
+            f"Low confidence score ({confidence_metrics.confidence_score:.2f}). "
+            "Consider collecting more data for reliable conclusions."
+        )
+    
+    # Add warnings for incomplete chain coverage
+    if confidence_metrics.chains_with_data < SUPPORTED_CHAIN_COUNT:
+        missing_count = SUPPORTED_CHAIN_COUNT - confidence_metrics.chains_with_data
+        warnings.append(
+            f"Data from {missing_count} chain(s) is missing. "
+            "Cross-chain analysis may be incomplete."
+        )
+    
+    # Add warnings for low field completeness
+    if confidence_metrics.field_completeness < 0.9:
+        pct = confidence_metrics.field_completeness * 100
+        warnings.append(
+            f"Field completeness is {pct:.1f}%. "
+            "Some records have missing required fields."
+        )
+    
+    # Add warnings for small sample size
+    if confidence_metrics.sample_size < 100:
+        warnings.append(
+            f"Small sample size ({confidence_metrics.sample_size} transactions). "
+            "Statistical conclusions may not be representative."
+        )
+    
+    return warnings

@@ -109,30 +109,30 @@
     - Display chain metrics comparison table
     - _Requirements: 6.2_
 
-- [ ] 8. Implement sample data generator and conclusions
-  - [ ] 8.1 Create sample data generation functions
+- [x] 8. Implement sample data generator and conclusions
+  - [x] 8.1 Create sample data generation functions
     - Implement `generate_sample_data(config) -> LoadedData`
     - Generate realistic transactions with proper distributions
     - Generate holders with SoV classifications
     - _Requirements: 8.1, 8.2_
-  - [ ] 8.2 Write property test for sample data schema compliance
+  - [x] 8.2 Write property test for sample data schema compliance
     - **Property 9: Sample data schema compliance**
     - **Validates: Requirements 8.2**
-  - [ ] 8.3 Write property test for sample data respects configuration
+  - [x] 8.3 Write property test for sample data respects configuration
     - **Property 10: Sample data respects configuration**
     - **Validates: Requirements 8.4**
-  - [ ] 8.4 Create sample data UI controls and conclusion generation
+  - [x] 8.4 Create sample data UI controls and conclusion generation
     - Add configuration inputs for sample size, SoV ratio
     - Implement `generate_conclusions(results, data) -> list[Conclusion]`
     - Calculate overall transaction vs SoV ratio
     - _Implements Requirements: 7.1, 7.2 (conclusions), 8.3 (sample indicator), 8.4 (config UI)_
-  - [ ] 8.5 Write property test for confidence calculation bounds
+  - [x] 8.5 Write property test for confidence calculation bounds
     - **Property 11: Confidence calculation bounds**
     - **Validates: Requirements 7.3**
-  - [ ] 8.6 Write property test for error detection completeness
+  - [x] 8.6 Write property test for error detection completeness
     - **Property 12: Error detection completeness**
     - **Validates: Requirements 7.4**
-  - [ ] 8.7 Create summary panel visualization cell
+  - [x] 8.7 Create summary panel visualization cell
     - Display key findings with confidence indicators
     - Show data quality warnings if errors present
     - _Requirements: 7.2, 7.3, 7.4_

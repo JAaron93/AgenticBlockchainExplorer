@@ -225,11 +225,12 @@ def load_data_cell(
     load_error = None
 
     if use_sample_data.value:
-        # Sample data will be implemented in task 8
+        # Sample data is handled in generate_sample_cell
+        # Just show a message here
         mo.md("""
-        ⚠️ **Sample data generation not yet implemented.**
+        ✅ **Using sample data mode.**
 
-        Please select a JSON file from the output directory.
+        Configure sample data parameters below and the analysis will use generated data.
         """)
     elif file_selector.value:
         try:
@@ -1594,6 +1595,354 @@ def display_sov_chart(mo, loaded_data, chain_metrics, sov_chart):
         return mo.ui.altair_chart(sov_chart)
     except Exception:
         return sov_chart
+
+
+# =============================================================================
+# Sample Data Generator and Conclusions (Task 8)
+# =============================================================================
+
+
+@app.cell
+def sample_data_imports():
+    """Import sample data generation and conclusion functions."""
+    import sys
+    from pathlib import Path
+
+    # Add notebooks directory to path for imports
+    notebooks_dir = Path(__file__).parent if '__file__' in dir() else Path('.')
+    if str(notebooks_dir) not in sys.path:
+        sys.path.insert(0, str(notebooks_dir))
+
+    from sample_data_generator import SampleDataConfig, generate_sample_data
+    from stablecoin_analysis_functions import (
+        ConfidenceLevel,
+        ConfidenceMetrics,
+        Conclusion,
+        calculate_confidence,
+        generate_conclusions,
+        get_data_quality_warnings,
+    )
+
+    return (
+        SampleDataConfig,
+        generate_sample_data,
+        ConfidenceLevel,
+        ConfidenceMetrics,
+        Conclusion,
+        calculate_confidence,
+        generate_conclusions,
+        get_data_quality_warnings,
+    )
+
+
+@app.cell
+def sample_data_ui(mo):
+    """Create UI controls for sample data generation."""
+    # Sample size slider
+    sample_size_slider = mo.ui.slider(
+        start=100,
+        stop=2000,
+        step=100,
+        value=500,
+        label="Number of Transactions",
+    )
+
+    # Number of holders slider
+    holders_slider = mo.ui.slider(
+        start=10,
+        stop=200,
+        step=10,
+        value=50,
+        label="Number of Holders",
+    )
+
+    # SoV ratio slider
+    sov_ratio_slider = mo.ui.slider(
+        start=0.0,
+        stop=1.0,
+        step=0.05,
+        value=0.3,
+        label="Store of Value Ratio",
+    )
+
+    # Generate button
+    generate_button = mo.ui.button(
+        label="Generate Sample Data",
+        kind="success",
+    )
+
+    mo.md(f"""
+    ## Sample Data Configuration
+
+    Configure and generate synthetic sample data for testing the analysis.
+
+    {sample_size_slider}
+
+    {holders_slider}
+
+    {sov_ratio_slider}
+
+    {generate_button}
+    """)
+
+    return (
+        sample_size_slider,
+        holders_slider,
+        sov_ratio_slider,
+        generate_button,
+    )
+
+
+@app.cell
+def generate_sample_cell(
+    mo,
+    use_sample_data,
+    sample_size_slider,
+    holders_slider,
+    sov_ratio_slider,
+    generate_button,
+    SampleDataConfig,
+    generate_sample_data,
+):
+    """Generate sample data when button is clicked or checkbox is checked."""
+    sample_data = None
+
+    if use_sample_data.value:
+        # Generate sample data with current slider values
+        config = SampleDataConfig(
+            num_transactions=sample_size_slider.value,
+            num_holders=holders_slider.value,
+            sov_ratio=sov_ratio_slider.value,
+        )
+        sample_data = generate_sample_data(config)
+
+        mo.md(f"""
+        ✅ **Sample data generated successfully!**
+
+        - Transactions: {len(sample_data.transactions_df):,}
+        - Holders: {len(sample_data.holders_df):,}
+        - SoV Ratio: {sov_ratio_slider.value:.0%}
+
+        ⚠️ **Note:** This analysis is based on synthetic sample data, not real blockchain data.
+        """)
+
+    return (sample_data,)
+
+
+@app.cell
+def merge_data_sources(loaded_data, sample_data):
+    """Merge loaded data and sample data into a single source."""
+    # Use sample data if available, otherwise use loaded data
+    analysis_data = sample_data if sample_data is not None else loaded_data
+    return (analysis_data,)
+
+
+@app.cell
+def conclusions_analysis_cell(
+    analysis_data,
+    activity_breakdown,
+    holder_metrics,
+    chain_metrics,
+    calculate_confidence,
+    generate_conclusions,
+    get_data_quality_warnings,
+):
+    """Calculate confidence and generate conclusions."""
+    confidence_metrics = None
+    conclusions = None
+    warnings = None
+
+    if analysis_data is not None:
+        # Calculate confidence
+        confidence_metrics = calculate_confidence(analysis_data.transactions_df)
+
+        # Generate conclusions if we have all the analysis results
+        if activity_breakdown and holder_metrics and chain_metrics:
+            conclusions = generate_conclusions(
+                activity_breakdown,
+                holder_metrics,
+                chain_metrics,
+                confidence_metrics,
+                analysis_data.errors,
+            )
+
+        # Get data quality warnings
+        warnings = get_data_quality_warnings(
+            analysis_data.errors,
+            confidence_metrics,
+        )
+
+    return confidence_metrics, conclusions, warnings
+
+
+@app.cell
+def summary_panel_display(
+    mo,
+    analysis_data,
+    confidence_metrics,
+    conclusions,
+    warnings,
+    ConfidenceLevel,
+):
+    """Display summary panel with key findings and confidence indicators."""
+    if analysis_data is None or confidence_metrics is None:
+        return
+
+    # Confidence level styling
+    confidence_colors = {
+        ConfidenceLevel.HIGH: "🟢",
+        ConfidenceLevel.MEDIUM: "🟡",
+        ConfidenceLevel.LOW: "🔴",
+    }
+    confidence_icon = confidence_colors.get(
+        confidence_metrics.confidence_level, "⚪"
+    )
+
+    # Build confidence details
+    confidence_details = f"""
+    | Metric | Value |
+    |--------|-------|
+    | **Sample Size** | {confidence_metrics.sample_size:,} transactions |
+    | **Field Completeness** | {confidence_metrics.field_completeness:.1%} |
+    | **Chain Coverage** | {confidence_metrics.chains_with_data}/3 chains |
+    | **Confidence Score** | {confidence_metrics.confidence_score:.3f} |
+    | **Confidence Level** | {confidence_icon} {confidence_metrics.confidence_level.value.upper()} |
+    """
+
+    # Build conclusions section
+    conclusions_section = ""
+    if conclusions:
+        conclusion_rows = []
+        for c in conclusions:
+            conf_icon = confidence_colors.get(c.confidence, "⚪")
+            conclusion_rows.append(
+                f"| {c.finding} | **{c.value}** | {conf_icon} | {c.explanation} |"
+            )
+        conclusions_table = "\n".join(conclusion_rows)
+        conclusions_section = f"""
+    ### Key Findings
+
+    | Finding | Value | Confidence | Explanation |
+    |---------|-------|------------|-------------|
+    {conclusions_table}
+    """
+
+    # Build warnings section
+    warnings_section = ""
+    if warnings:
+        warning_items = "\n".join([f"- ⚠️ {w}" for w in warnings])
+        warnings_section = f"""
+    ### Data Quality Warnings
+
+    {warning_items}
+    """
+
+    # Sample data indicator
+    sample_indicator = ""
+    if analysis_data.is_sample_data:
+        sample_indicator = """
+    > ⚠️ **Note:** This analysis is based on synthetic sample data, not real blockchain data.
+    > Results are for demonstration purposes only.
+    """
+
+    mo.md(f"""
+    ## Summary & Conclusions
+
+    {sample_indicator}
+
+    ### Data Quality & Confidence
+
+    {confidence_details}
+
+    {conclusions_section}
+
+    {warnings_section}
+    """)
+
+    return
+
+
+@app.cell
+def final_summary(
+    mo,
+    analysis_data,
+    activity_breakdown,
+    holder_metrics,
+    confidence_metrics,
+    ConfidenceLevel,
+):
+    """Display final summary answering the main question."""
+    if (analysis_data is None or activity_breakdown is None or
+            holder_metrics is None or confidence_metrics is None):
+        return
+
+    # Calculate overall transaction vs SoV ratio
+    tx_count = activity_breakdown.counts.get("transaction", 0)
+    sov_count = activity_breakdown.counts.get("store_of_value", 0)
+    total = tx_count + sov_count
+
+    if total > 0:
+        tx_pct = tx_count / total * 100
+        sov_pct = sov_count / total * 100
+
+        if tx_pct > sov_pct:
+            primary_use = "**Everyday Transactions**"
+            ratio_desc = f"{tx_pct:.1f}% transactions vs {sov_pct:.1f}% store-of-value"
+        else:
+            primary_use = "**Store of Value**"
+            ratio_desc = f"{sov_pct:.1f}% store-of-value vs {tx_pct:.1f}% transactions"
+    else:
+        primary_use = "Insufficient data"
+        ratio_desc = "No transaction data available"
+
+    # Holder perspective
+    holder_sov_pct = holder_metrics.sov_percentage
+    holder_active_pct = 100.0 - holder_sov_pct
+
+    if holder_sov_pct > holder_active_pct:
+        holder_primary = "**Store of Value**"
+    else:
+        holder_primary = "**Active Transacting**"
+
+    # Confidence indicator
+    confidence_colors = {
+        ConfidenceLevel.HIGH: "🟢 High",
+        ConfidenceLevel.MEDIUM: "🟡 Medium",
+        ConfidenceLevel.LOW: "🔴 Low",
+    }
+    confidence_display = confidence_colors.get(
+        confidence_metrics.confidence_level, "⚪ Unknown"
+    )
+
+    mo.md(f"""
+    ---
+
+    ## 📊 Final Answer: How Are Stablecoins Being Used?
+
+    ### By Transaction Activity
+
+    Primary use: {primary_use}
+
+    {ratio_desc}
+
+    ### By Holder Behavior
+
+    Primary pattern: {holder_primary}
+
+    {holder_sov_pct:.1f}% of holders are classified as store-of-value,
+    while {holder_active_pct:.1f}% are active transactors.
+
+    ### Confidence Level
+
+    {confidence_display} (score: {confidence_metrics.confidence_score:.3f})
+
+    ---
+
+    *Analysis complete. Scroll up to explore detailed breakdowns by stablecoin,
+    chain, and time period.*
+    """)
+
+    return
 
 
 if __name__ == "__main__":

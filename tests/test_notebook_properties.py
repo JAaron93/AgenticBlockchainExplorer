@@ -605,7 +605,8 @@ class TestHolderAnalysis:
             # Add holding_period_days if not present
             if "holding_period_days" not in df.columns:
                 df["holding_period_days"] = (
-                    pd.to_datetime(df["last_activity"]) - pd.to_datetime(df["first_seen"])
+                    pd.to_datetime(df["last_activity"], format='ISO8601') - 
+                    pd.to_datetime(df["first_seen"], format='ISO8601')
                 ).dt.days
 
         total_holders = len(df)
@@ -703,4 +704,346 @@ class TestHolderAnalysis:
             assert returned_balances == top_n_balances, (
                 f"Returned balances {returned_balances} don't match "
                 f"expected top {expected_count} balances {top_n_balances}"
+            )
+
+
+# =============================================================================
+# Sample Data Generator Tests
+# =============================================================================
+
+class TestSampleDataGenerator:
+    """Tests for sample data generation functions."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        num_transactions=st.integers(min_value=0, max_value=100),
+        num_holders=st.integers(min_value=0, max_value=50),
+        sov_ratio=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
+        seed=st.integers(min_value=0, max_value=1000000),
+    )
+    def test_property_9_sample_data_schema_compliance(
+        self, num_transactions, num_holders, sov_ratio, seed
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 9: Sample data schema compliance**
+
+        For any sample data configuration, generated data SHALL pass the same
+        schema validation as real exported data.
+
+        **Validates: Requirements 8.2**
+        """
+        from sample_data_generator import SampleDataConfig, generate_sample_json
+
+        # Create configuration
+        config = SampleDataConfig(
+            num_transactions=num_transactions,
+            num_holders=num_holders,
+            sov_ratio=sov_ratio,
+            seed=seed,
+        )
+
+        # Generate sample data as JSON
+        json_data = generate_sample_json(config)
+
+        # Validate against schema
+        is_valid, errors = validate_schema(json_data)
+
+        assert is_valid, (
+            f"Generated sample data failed schema validation. "
+            f"Config: num_transactions={num_transactions}, "
+            f"num_holders={num_holders}, sov_ratio={sov_ratio}. "
+            f"Errors: {errors}"
+        )
+
+        # Verify all required top-level fields are present
+        assert "metadata" in json_data
+        assert "summary" in json_data
+        assert "transactions" in json_data
+        assert "holders" in json_data
+
+        # Verify metadata fields
+        assert "run_id" in json_data["metadata"]
+        assert "collection_timestamp" in json_data["metadata"]
+        assert "agent_version" in json_data["metadata"]
+        assert "explorers_queried" in json_data["metadata"]
+        assert "total_records" in json_data["metadata"]
+
+        # Verify transaction count matches
+        assert len(json_data["transactions"]) == num_transactions, (
+            f"Expected {num_transactions} transactions, "
+            f"got {len(json_data['transactions'])}"
+        )
+
+        # Verify holder count matches
+        assert len(json_data["holders"]) == num_holders, (
+            f"Expected {num_holders} holders, "
+            f"got {len(json_data['holders'])}"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        num_transactions=st.integers(min_value=0, max_value=100),
+        num_holders=st.integers(min_value=0, max_value=50),
+        sov_ratio=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
+        seed=st.integers(min_value=0, max_value=1000000),
+    )
+    def test_property_10_sample_data_respects_configuration(
+        self, num_transactions, num_holders, sov_ratio, seed
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 10: Sample data respects configuration**
+
+        For any sample data configuration specifying N transactions and M holders,
+        generated data SHALL contain exactly N transactions and M holders.
+
+        **Validates: Requirements 8.4**
+        """
+        from sample_data_generator import SampleDataConfig, generate_sample_data
+
+        # Create configuration
+        config = SampleDataConfig(
+            num_transactions=num_transactions,
+            num_holders=num_holders,
+            sov_ratio=sov_ratio,
+            seed=seed,
+        )
+
+        # Generate sample data
+        data = generate_sample_data(config)
+
+        # Verify transaction count
+        assert len(data.transactions_df) == num_transactions, (
+            f"Expected {num_transactions} transactions, "
+            f"got {len(data.transactions_df)}"
+        )
+
+        # Verify holder count
+        assert len(data.holders_df) == num_holders, (
+            f"Expected {num_holders} holders, "
+            f"got {len(data.holders_df)}"
+        )
+
+        # Verify is_sample_data flag is set
+        assert data.is_sample_data is True, (
+            "Generated data should have is_sample_data=True"
+        )
+
+        # Verify SoV ratio is approximately correct (within tolerance)
+        if num_holders > 0:
+            actual_sov_count = data.holders_df["is_store_of_value"].sum()
+            expected_sov_count = int(num_holders * sov_ratio)
+            
+            # Allow for rounding differences
+            assert actual_sov_count == expected_sov_count, (
+                f"Expected {expected_sov_count} SoV holders "
+                f"(ratio={sov_ratio}), got {actual_sov_count}"
+            )
+
+        # Verify metadata total_records is correct
+        expected_total = num_transactions + num_holders
+        assert data.metadata["total_records"] == expected_total, (
+            f"Expected total_records={expected_total}, "
+            f"got {data.metadata['total_records']}"
+        )
+
+
+
+# =============================================================================
+# Confidence and Conclusion Tests
+# =============================================================================
+
+class TestConfidenceCalculation:
+    """Tests for confidence calculation functions."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        num_transactions=st.integers(min_value=0, max_value=2000),
+        num_holders=st.integers(min_value=0, max_value=100),
+        seed=st.integers(min_value=0, max_value=1000000),
+    )
+    def test_property_11_confidence_calculation_bounds(
+        self, num_transactions, num_holders, seed
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 11: Confidence calculation bounds**
+
+        For any dataset, the calculated confidence indicator SHALL be a valid
+        ConfidenceLevel enum value (HIGH, MEDIUM, or LOW) based on the formula:
+        confidence_score = 0.6 × min(sample_size/1000, 1.0) + 0.4 × completeness_percent,
+        mapped via ConfidenceLevel.from_score() where HIGH (score ≥ 0.85),
+        MEDIUM (0.50 ≤ score < 0.85), LOW (score < 0.50).
+
+        **Validates: Requirements 7.3**
+        """
+        from sample_data_generator import SampleDataConfig, generate_sample_data
+        from stablecoin_analysis_functions import (
+            calculate_confidence, ConfidenceLevel, SUPPORTED_CHAIN_COUNT
+        )
+
+        # Generate sample data
+        config = SampleDataConfig(
+            num_transactions=num_transactions,
+            num_holders=num_holders,
+            seed=seed,
+        )
+        data = generate_sample_data(config)
+
+        # Calculate confidence
+        metrics = calculate_confidence(data.transactions_df)
+
+        # Verify confidence_level is a valid enum value
+        assert isinstance(metrics.confidence_level, ConfidenceLevel), (
+            f"confidence_level should be ConfidenceLevel enum, "
+            f"got {type(metrics.confidence_level)}"
+        )
+        assert metrics.confidence_level in [
+            ConfidenceLevel.HIGH, ConfidenceLevel.MEDIUM, ConfidenceLevel.LOW
+        ], f"Invalid confidence level: {metrics.confidence_level}"
+
+        # Verify confidence_score is in valid range [0.0, 1.0]
+        assert 0.0 <= metrics.confidence_score <= 1.0, (
+            f"confidence_score should be in [0.0, 1.0], "
+            f"got {metrics.confidence_score}"
+        )
+
+        # Verify the formula is correctly applied
+        expected_normalized_sample = min(num_transactions / 1000, 1.0)
+        expected_score = (
+            0.6 * expected_normalized_sample +
+            0.4 * metrics.completeness_percent
+        )
+        assert abs(metrics.confidence_score - expected_score) < 0.001, (
+            f"Confidence score {metrics.confidence_score} doesn't match "
+            f"expected {expected_score} from formula"
+        )
+
+        # Verify threshold mapping
+        if metrics.confidence_score >= 0.85:
+            assert metrics.confidence_level == ConfidenceLevel.HIGH, (
+                f"Score {metrics.confidence_score} >= 0.85 should be HIGH, "
+                f"got {metrics.confidence_level}"
+            )
+        elif metrics.confidence_score >= 0.50:
+            assert metrics.confidence_level == ConfidenceLevel.MEDIUM, (
+                f"Score {metrics.confidence_score} in [0.50, 0.85) should be MEDIUM, "
+                f"got {metrics.confidence_level}"
+            )
+        else:
+            assert metrics.confidence_level == ConfidenceLevel.LOW, (
+                f"Score {metrics.confidence_score} < 0.50 should be LOW, "
+                f"got {metrics.confidence_level}"
+            )
+
+        # Verify component metrics are in valid ranges
+        assert 0.0 <= metrics.field_completeness <= 1.0, (
+            f"field_completeness should be in [0.0, 1.0], "
+            f"got {metrics.field_completeness}"
+        )
+        assert 0.0 <= metrics.chain_coverage <= 1.0, (
+            f"chain_coverage should be in [0.0, 1.0], "
+            f"got {metrics.chain_coverage}"
+        )
+        assert 0 <= metrics.chains_with_data <= SUPPORTED_CHAIN_COUNT, (
+            f"chains_with_data should be in [0, {SUPPORTED_CHAIN_COUNT}], "
+            f"got {metrics.chains_with_data}"
+        )
+        assert 0.0 <= metrics.completeness_percent <= 1.0, (
+            f"completeness_percent should be in [0.0, 1.0], "
+            f"got {metrics.completeness_percent}"
+        )
+
+
+class TestErrorDetection:
+    """Tests for error detection and warning generation."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        num_transactions=st.integers(min_value=10, max_value=100),
+        num_errors=st.integers(min_value=1, max_value=10),
+        seed=st.integers(min_value=0, max_value=1000000),
+    )
+    def test_property_12_error_detection_completeness(
+        self, num_transactions, num_errors, seed
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 12: Error detection completeness**
+
+        For any JSON data containing an "errors" array with non-empty entries,
+        the data quality warnings SHALL include at least one warning.
+
+        **Validates: Requirements 7.4**
+        """
+        from sample_data_generator import SampleDataConfig, generate_sample_data
+        from stablecoin_analysis_functions import (
+            calculate_confidence, get_data_quality_warnings
+        )
+
+        # Generate sample data
+        config = SampleDataConfig(
+            num_transactions=num_transactions,
+            num_holders=10,
+            seed=seed,
+        )
+        data = generate_sample_data(config)
+
+        # Add errors to the data
+        errors = [f"Test error {i}" for i in range(num_errors)]
+
+        # Calculate confidence
+        confidence = calculate_confidence(data.transactions_df)
+
+        # Get warnings with errors
+        warnings = get_data_quality_warnings(errors, confidence)
+
+        # Verify at least one warning is generated when errors are present
+        assert len(warnings) >= 1, (
+            f"Expected at least 1 warning when {num_errors} errors present, "
+            f"got {len(warnings)} warnings"
+        )
+
+        # Verify the warning mentions the errors
+        error_warning_found = any(
+            "error" in w.lower() for w in warnings
+        )
+        assert error_warning_found, (
+            f"Expected a warning mentioning errors, but none found. "
+            f"Warnings: {warnings}"
+        )
+
+    @settings(max_examples=50, deadline=None)
+    @given(
+        num_transactions=st.integers(min_value=0, max_value=50),
+        seed=st.integers(min_value=0, max_value=1000000),
+    )
+    def test_small_sample_size_warning(self, num_transactions, seed):
+        """
+        Test that small sample sizes generate appropriate warnings.
+        """
+        from sample_data_generator import SampleDataConfig, generate_sample_data
+        from stablecoin_analysis_functions import (
+            calculate_confidence, get_data_quality_warnings
+        )
+
+        # Generate sample data with small sample size
+        config = SampleDataConfig(
+            num_transactions=num_transactions,
+            num_holders=5,
+            seed=seed,
+        )
+        data = generate_sample_data(config)
+
+        # Calculate confidence
+        confidence = calculate_confidence(data.transactions_df)
+
+        # Get warnings
+        warnings = get_data_quality_warnings([], confidence)
+
+        # If sample size < 100, should have a warning
+        if num_transactions < 100:
+            sample_warning_found = any(
+                "sample size" in w.lower() for w in warnings
+            )
+            assert sample_warning_found, (
+                f"Expected sample size warning for {num_transactions} transactions, "
+                f"but none found. Warnings: {warnings}"
             )
