@@ -167,13 +167,13 @@
     - Add validation methods to ensure data integrity
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.2, 3.3, 3.4_
 
-- [ ] 13. Add API rate limiting and security
-  - [ ] 13.1 Implement rate limiting
+- [x] 13. Add API rate limiting and security
+  - [x] 13.1 Implement rate limiting
     - Add rate limiting middleware to FastAPI (100 requests/minute per user)
     - Implement request throttling for blockchain explorer APIs
     - _Requirements: 4.5_
   
-  - [ ] 13.2 Add security headers and CORS
+  - [x] 13.2 Add security headers and CORS
     - Configure CORS for trusted domains only
     - Add security headers (HSTS, X-Frame-Options, CSP)
     - Implement CSRF protection for state-changing endpoints

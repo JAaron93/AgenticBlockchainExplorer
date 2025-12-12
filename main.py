@@ -12,6 +12,12 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from api.routes import auth_router, agent_router, results_router
+from api.rate_limiter import RateLimitMiddleware, init_rate_limiter
+from api.security import (
+    init_cors_config,
+    init_csrf_protection,
+    get_cors_config,
+)
 from config.loader import ConfigurationManager
 from config.models import Config
 from core.auth0_manager import init_auth0, close_auth0
@@ -67,6 +73,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         init_auth0(_config.auth0)
         logger.info("Auth0 manager initialized")
 
+        # Initialize rate limiter
+        init_rate_limiter(requests_per_minute=_config.rate_limit.per_minute)
+        logger.info(
+            f"Rate limiter initialized: {_config.rate_limit.per_minute} requests/minute"
+        )
+
+        # Initialize CORS configuration
+        init_cors_config(
+            allowed_origins=_config.cors.allowed_origins,
+            allow_credentials=_config.cors.allow_credentials,
+        )
+        logger.info(f"CORS configured for origins: {_config.cors.allowed_origins}")
+
+        # Initialize CSRF protection
+        init_csrf_protection(secret_key=_config.app.secret_key)
+        logger.info("CSRF protection initialized")
+
         logger.info("Application startup complete")
 
     except Exception as e:
@@ -120,32 +143,105 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 @app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
     """Add CORS headers based on configuration."""
+    cors_config = get_cors_config()
+    
     # Handle preflight requests
-    if request.method == "OPTIONS" and _config:
+    if request.method == "OPTIONS" and cors_config:
         origin = request.headers.get("origin")
-        if origin and origin in _config.cors.allowed_origins:
+        if origin and cors_config.is_origin_allowed(origin):
+            allow_creds = str(cors_config.allow_credentials).lower()
+            allow_methods = ", ".join(cors_config.allowed_methods)
+            allow_headers = ", ".join(cors_config.allowed_headers)
+            expose_headers = ", ".join(cors_config.expose_headers)
             return JSONResponse(
                 status_code=200,
+                content={},
                 headers={
                     "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Credentials": "true",
-                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-                    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                    "Access-Control-Allow-Credentials": allow_creds,
+                    "Access-Control-Allow-Methods": allow_methods,
+                    "Access-Control-Allow-Headers": allow_headers,
+                    "Access-Control-Expose-Headers": expose_headers,
+                    "Access-Control-Max-Age": str(cors_config.max_age),
                 },
             )
-  
+
     response = await call_next(request)
-    
+
     # Get CORS config if available
-    if _config:
+    if cors_config:
         origin = request.headers.get("origin")
-        if origin and origin in _config.cors.allowed_origins:
+        if origin and cors_config.is_origin_allowed(origin):
+            allow_creds = str(cors_config.allow_credentials).lower()
             response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+            response.headers["Access-Control-Allow-Credentials"] = allow_creds
+            response.headers["Access-Control-Allow-Methods"] = \
+                ", ".join(cors_config.allowed_methods)
+            response.headers["Access-Control-Allow-Headers"] = \
+                ", ".join(cors_config.allowed_headers)
+            response.headers["Access-Control-Expose-Headers"] = \
+                ", ".join(cors_config.expose_headers)
     
     return response
+
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+
+    # Determine if we're in production
+    is_production = _config and _config.app.env == "production"
+
+    # HSTS - only in production with HTTPS
+    if is_production:
+        response.headers["Strict-Transport-Security"] = \
+            "max-age=31536000; includeSubDomains"
+
+    # Clickjacking protection
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # MIME sniffing protection
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # XSS filter (legacy, but still useful)
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # Content Security Policy
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    response.headers["Content-Security-Policy"] = csp
+
+    # Referrer Policy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Permissions Policy
+    response.headers["Permissions-Policy"] = (
+        "accelerometer=(), camera=(), geolocation=(), "
+        "gyroscope=(), magnetometer=(), microphone=(), "
+        "payment=(), usb=()"
+    )
+
+    return response
+
+
+# Add security middlewares (order matters - first added = last executed)
+# Rate limiting should be checked early
+app.add_middleware(RateLimitMiddleware)
+
+# Security headers should be added to all responses
+# Note: SecurityHeadersMiddleware is configured dynamically based on environment
+# It will be added after config is loaded in lifespan
 
 
 # Include routers

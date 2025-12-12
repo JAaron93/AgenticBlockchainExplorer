@@ -25,6 +25,7 @@ from api.auth_middleware import (
     get_client_info,
     requires_permission,
 )
+from api.security import get_csrf_protection
 from core.auth0_manager import (
     Auth0Error,
     Auth0Manager,
@@ -297,6 +298,26 @@ async def logout(
     logger.info("User logged out, redirecting to Auth0 logout")
     
     return RedirectResponse(url=logout_url, status_code=status.HTTP_302_FOUND)
+
+
+@auth_router.get("/csrf-token")
+async def get_csrf_token() -> dict:
+    """Get a CSRF token for state-changing requests.
+
+    Returns a CSRF token that should be included in the X-CSRF-Token
+    header for POST, PUT, DELETE, and PATCH requests to non-API endpoints.
+
+    API endpoints (/api/*) use JWT authentication instead of CSRF tokens.
+    """
+    csrf = get_csrf_protection()
+    if csrf is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CSRF protection not initialized",
+        )
+
+    token = csrf.generate_token()
+    return {"csrf_token": token}
 
 
 # ==================== Agent Control Endpoints ====================
