@@ -172,12 +172,12 @@ def build_run_config(args: argparse.Namespace) -> RunConfig:
     
     if args.explorers:
         run_config.explorers = [
-            e.strip() for e in args.explorers.split(",")
+            e.strip() for e in args.explorers.split(",") if e.strip()
         ]
     
     if args.stablecoins:
         run_config.stablecoins = [
-            s.strip().upper() for s in args.stablecoins.split(",")
+            s.strip().upper() for s in args.stablecoins.split(",") if s.strip()
         ]
     
     if args.max_records:

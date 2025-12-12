@@ -10,7 +10,7 @@ import secrets
 import time
 from typing import Callable, Dict, List, Optional, Set
 
-from fastapi import Request, status
+from fastapi import HTTPException, Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
@@ -391,9 +391,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     f"Missing CSRF token for {request.method} {request.url.path}",
                     extra={"path": request.url.path, "method": request.method}
                 )
-                return JSONResponse(
+                raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    content={"detail": "CSRF token missing"},
+                    detail="CSRF token missing",
                 )
 
             if not csrf.validate_token(token):
@@ -401,9 +401,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     f"Invalid CSRF token for {request.method} {request.url.path}",
                     extra={"path": request.url.path, "method": request.method}
                 )
-                return JSONResponse(
+                raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    content={"detail": "Invalid CSRF token"},
+                    detail="Invalid CSRF token",
                 )
         
         response = await call_next(request)

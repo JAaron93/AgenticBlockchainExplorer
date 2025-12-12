@@ -291,7 +291,7 @@ async def readiness_check():
         get_config()  # Verify config is loaded
         checks["config"] = "healthy"
     except Exception as e:
-        checks["config"] = f"unhealthy: {str(e)}"
+        checks["config"] = "unhealthy"
         all_healthy = False
     
     # Check database connectivity
