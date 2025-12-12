@@ -47,20 +47,20 @@
     - Return appropriate HTTP errors (401, 403) for auth failures
     - _Requirements: 4.1, 4.3_
 
-- [ ] 5. Build FastAPI web API
-  - [ ] 5.1 Implement authentication endpoints
+- [x] 5. Build FastAPI web API
+  - [x] 5.1 Implement authentication endpoints
     - Create /login endpoint that redirects to Auth0
     - Implement /callback endpoint to handle Auth0 response and create session
     - Add /logout endpoint to clear session
     - _Requirements: 4.1_
   
-  - [ ] 5.2 Implement agent control endpoints
+  - [x] 5.2 Implement agent control endpoints
     - Create POST /api/agent/run endpoint to trigger data collection
     - Implement GET /api/agent/status/{run_id} to check run progress
     - Add background task execution for long-running agent operations
     - _Requirements: 1.4, 4.2_
   
-  - [ ] 5.3 Implement results endpoints
+  - [x] 5.3 Implement results endpoints
     - Create GET /api/results to list all runs for authenticated user
     - Implement GET /api/results/{run_id} to get detailed results
     - Add GET /api/results/{run_id}/download to serve JSON file

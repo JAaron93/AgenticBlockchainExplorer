@@ -6,6 +6,7 @@ Provides JWT token validation using python-jose and Auth0 JWKS.
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 
 import aiohttp
 from jose import jwt, JWTError, ExpiredSignatureError
@@ -332,7 +333,7 @@ class Auth0Manager:
         if state:
             params["state"] = state
 
-        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        query_string = urlencode(params)
         return f"https://{self._config.domain}/authorize?{query_string}"
 
     def get_logout_url(self, return_to: Optional[str] = None) -> str:
@@ -345,11 +346,12 @@ class Auth0Manager:
             Logout URL to redirect user to.
         """
         return_url = return_to or str(self._config.logout_url)
-        return (
-            f"https://{self._config.domain}/v2/logout?"
-            f"client_id={self._config.client_id}&"
-            f"returnTo={return_url}"
-        )
+        params = {
+            "client_id": self._config.client_id,
+            "returnTo": return_url,
+        }
+        query_string = urlencode(params)
+        return f"https://{self._config.domain}/v2/logout?{query_string}"
 
     async def exchange_code_for_tokens(
         self,
@@ -440,8 +442,11 @@ def init_auth0(config: Auth0Config) -> Auth0Manager:
     return _auth0_manager
 
 
-def close_auth0() -> None:
-    """Close the global Auth0 manager."""
+async def close_auth0() -> None:
+    """Close the global Auth0 manager and clean up resources."""
     global _auth0_manager
+    if _auth0_manager is not None:
+        # Clear any cached data
+        _auth0_manager._jwks = None
     _auth0_manager = None
     logger.info("Auth0 manager closed")
