@@ -96,14 +96,15 @@ This document specifies the requirements for a marimo Python notebook that analy
 1. WHEN analysis is complete THEN the Notebook SHALL calculate an overall "transaction vs store_of_value" ratio based on both transaction counts and holder classifications
 2. WHEN displaying conclusions THEN the Notebook SHALL render a summary panel with key findings including dominant usage pattern, chain with highest transaction activity, and stablecoin with highest store_of_value ratio
 3. WHEN displaying conclusions THEN the Notebook SHALL calculate and display a confidence indicator using the following formula and thresholds:
-   - **Sample Size Score**: High (>1000 transactions), Medium (100-1000 transactions), Low (<100 transactions)
-   - **Data Completeness Score**: Percentage of non-null required fields (transaction_hash, timestamp, amount, stablecoin, chain, activity_type) across all records, plus chain coverage (number of chains with data / 3)
-   - **Completeness Thresholds**: High (≥95%), Medium (80-95%), Low (<80%)
-   - **Combined Confidence Formula**: confidence_score = 0.6 × normalized_sample_size + 0.4 × completeness_percent, where normalized_sample_size = min(sample_size / 1000, 1.0)
+   - **Field Completeness**: Percentage of non-null required fields (transaction_hash, timestamp, amount, stablecoin, chain, activity_type) across all transaction records
+   - **Chain Coverage**: chains_with_data / 3 (where 3 is the fixed count of supported chains: ethereum, bsc, polygon)
+   - **Combined Completeness**: completeness_percent = 0.7 × field_completeness + 0.3 × chain_coverage (field completeness weighted 70%, chain coverage weighted 30%)
+   - **Normalized Sample Size**: normalized_sample_size = min(sample_size / 1000, 1.0)
+   - **Combined Confidence Formula**: confidence_score = 0.6 × normalized_sample_size + 0.4 × completeness_percent
    - **Final Confidence Mapping**: High (score ≥ 0.85), Medium (score 0.50-0.85), Low (score < 0.50)
-   - **Example - High Confidence**: 1500 transactions, 98% completeness, 3 chains → score = 0.6×1.0 + 0.4×0.98 = 0.992 → "High"
-   - **Example - Medium Confidence**: 500 transactions, 90% completeness, 2 chains → score = 0.6×0.5 + 0.4×0.90 = 0.66 → "Medium"
-   - **Example - Low Confidence**: 50 transactions, 75% completeness, 1 chain → score = 0.6×0.05 + 0.4×0.75 = 0.33 → "Low"
+   - **Example - High Confidence**: 1500 transactions, 98% field completeness, 3 chains → chain_coverage=1.0, completeness=0.7×0.98+0.3×1.0=0.986, score=0.6×1.0+0.4×0.986=0.994 → "High"
+   - **Example - Medium Confidence**: 500 transactions, 95% field completeness, 2 chains → chain_coverage=0.667, completeness=0.7×0.95+0.3×0.667=0.865, score=0.6×0.5+0.4×0.865=0.646 → "Medium"
+   - **Example - Low Confidence**: 50 transactions, 80% field completeness, 1 chain → chain_coverage=0.333, completeness=0.7×0.80+0.3×0.333=0.66, score=0.6×0.05+0.4×0.66=0.294 → "Low"
 4. WHEN data contains errors from collection THEN the Notebook SHALL display warnings about data quality issues that may affect conclusions
 
 ### Requirement 8

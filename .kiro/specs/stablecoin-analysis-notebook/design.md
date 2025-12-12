@@ -219,12 +219,24 @@ class Conclusion:
             explanation=data["explanation"],
         )
 
+# System constant: supported chains (fixed requirement)
+# The system supports exactly 3 chains: ethereum, bsc, polygon
+# This is a fixed architectural constraint matching the blockchain explorer collectors
+SUPPORTED_CHAINS: list[str] = ["ethereum", "bsc", "polygon"]
+SUPPORTED_CHAIN_COUNT: int = 3  # len(SUPPORTED_CHAINS), used for chain coverage calculation
+
 @dataclass
 class ConfidenceMetrics:
-    """Metrics used for confidence calculation."""
+    """Metrics used for confidence calculation.
+    
+    Note: chain_coverage is calculated as chains_with_data / SUPPORTED_CHAIN_COUNT,
+    where SUPPORTED_CHAIN_COUNT is fixed at 3 (ethereum, bsc, polygon). This is a
+    system-wide architectural constraint matching the blockchain explorer collectors.
+    """
     sample_size: int
     completeness_percent: float
-    chain_coverage: float  # chains_with_data / 3
+    chain_coverage: float  # chains_with_data / SUPPORTED_CHAIN_COUNT (3)
+    chains_with_data: int  # count of unique chains present in dataset
     confidence_score: float
     confidence_level: ConfidenceLevel
     
@@ -234,6 +246,7 @@ class ConfidenceMetrics:
             "sample_size": self.sample_size,
             "completeness_percent": self.completeness_percent,
             "chain_coverage": self.chain_coverage,
+            "chains_with_data": self.chains_with_data,
             "confidence_score": self.confidence_score,
             "confidence_level": self.confidence_level.value,
         }
@@ -249,22 +262,45 @@ def generate_conclusions(results: AnalysisResults, data: LoadedData) -> list[Con
 def calculate_confidence(data: LoadedData) -> ConfidenceMetrics:
     """Calculate confidence level based on data quality.
     
-    Formula:
+    Step 1 - Calculate Component Metrics:
+        sample_size = len(transactions_df)
+        
+        field_completeness = (non_null_required_fields / total_required_fields)
+            where required_fields = [transaction_hash, timestamp, amount, 
+                                     stablecoin, chain, activity_type]
+        
+        chain_coverage = chains_with_data / SUPPORTED_CHAIN_COUNT
+            where SUPPORTED_CHAIN_COUNT = 3 (ethereum, bsc, polygon)
+    
+    Step 2 - Combine into Completeness Percent:
+        completeness_percent = 0.7 * field_completeness + 0.3 * chain_coverage
+        
+        This weights field completeness (70%) higher than chain coverage (30%)
+        because having complete data is more important than having all chains.
+    
+    Step 3 - Calculate Final Confidence Score:
         normalized_sample_size = min(sample_size / 1000, 1.0)
         confidence_score = 0.6 * normalized_sample_size + 0.4 * completeness_percent
     
-    Thresholds (via ConfidenceLevel.from_score):
+    Step 4 - Map to Confidence Level (via ConfidenceLevel.from_score):
         - HIGH: score >= 0.85
         - MEDIUM: 0.50 <= score < 0.85
         - LOW: score < 0.50
     
-    Completeness is calculated as:
-        - Percentage of non-null required fields (transaction_hash, timestamp, 
-          amount, stablecoin, chain, activity_type) across all records
-        - Plus chain coverage factor (chains_with_data / 3)
+    Example Calculation:
+        Given: 500 transactions, 95% field completeness, 2 chains with data
+        
+        chain_coverage = 2 / 3 = 0.667
+        completeness_percent = 0.7 * 0.95 + 0.3 * 0.667 = 0.665 + 0.200 = 0.865
+        normalized_sample_size = min(500 / 1000, 1.0) = 0.5
+        confidence_score = 0.6 * 0.5 + 0.4 * 0.865 = 0.3 + 0.346 = 0.646
+        confidence_level = MEDIUM (0.50 <= 0.646 < 0.85)
+    
+    Note: chain_coverage is stored separately in ConfidenceMetrics for transparency,
+    but it is incorporated into completeness_percent for the final score calculation.
     
     Returns:
-        ConfidenceMetrics with confidence_level as ConfidenceLevel enum.
+        ConfidenceMetrics with all component values and final confidence_level.
     """
     ...
 ```
