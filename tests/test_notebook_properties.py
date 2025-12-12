@@ -131,6 +131,15 @@ def compute_summary_from_data(transactions: list) -> dict:
     Compute summary statistics from transaction data.
     
     This ensures the summary is consistent with the actual transactions.
+    
+    Note: This function is intended ONLY for Hypothesis-generated test data.
+    Input transactions MUST conform to the following constraints:
+    - tx["stablecoin"] must be in STABLECOINS ("USDC", "USDT")
+    - tx["activity_type"] must be in ACTIVITY_TYPES ("transaction", "store_of_value", "other")
+    - tx["chain"] must be in CHAINS ("ethereum", "bsc", "polygon")
+    - tx["amount"] must be a valid decimal string (parseable by Decimal())
+    
+    These constraints are guaranteed by the valid_transaction() Hypothesis strategy.
     """
     # Initialize counters
     by_stablecoin = {
@@ -141,6 +150,7 @@ def compute_summary_from_data(transactions: list) -> dict:
     by_chain = {chain: 0 for chain in CHAINS}
     
     # Aggregate from transactions
+    # Note: No defensive validation here as inputs are guaranteed by Hypothesis strategies
     for tx in transactions:
         coin = tx["stablecoin"]
         activity = tx["activity_type"]

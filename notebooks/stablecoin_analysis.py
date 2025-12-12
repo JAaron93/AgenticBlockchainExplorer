@@ -341,8 +341,7 @@ def activity_pie_chart(mo, alt, pd, loaded_data, activity_breakdown):
     ])
 
     if pie_data.empty:
-        mo.md("*No transaction data available for pie chart.*")
-        return
+        return (None,)
 
     # Create pie chart using Altair
     pie_chart = alt.Chart(pie_data).mark_arc(innerRadius=50).encode(
@@ -372,19 +371,17 @@ def activity_pie_chart(mo, alt, pd, loaded_data, activity_breakdown):
 
 
 @app.cell
+@app.cell
 def display_pie_chart(mo, loaded_data, activity_breakdown, pie_chart):
     """Display the pie chart."""
-    if loaded_data is None or activity_breakdown is None:
+    if loaded_data is None or activity_breakdown is None or pie_chart is None:
         return
 
     try:
-        mo.ui.altair_chart(pie_chart)
+        return mo.ui.altair_chart(pie_chart)
     except Exception:
         # Fallback if altair_chart not available
-        pie_chart
-    return
-
-
+        return pie_chart
 @app.cell
 def activity_volume_bar_chart(
     mo, alt, pd, loaded_data, activity_breakdown, Decimal
@@ -404,9 +401,8 @@ def activity_volume_bar_chart(
     ])
 
     if bar_data["volume"].sum() == 0:
-        mo.md("*No volume data available for bar chart.*")
-        return
-
+    if bar_data["volume"].sum() == 0:
+        return (None,)
     # Create bar chart using Altair
     bar_chart = alt.Chart(bar_data).mark_bar().encode(
         x=alt.X(
@@ -440,17 +436,16 @@ def activity_volume_bar_chart(
 
 @app.cell
 def display_bar_chart(mo, loaded_data, activity_breakdown, bar_chart):
+@app.cell
+def display_bar_chart(mo, loaded_data, activity_breakdown, bar_chart):
     """Display the bar chart."""
-    if loaded_data is None or activity_breakdown is None:
+    if loaded_data is None or activity_breakdown is None or bar_chart is None:
         return
 
     try:
-        mo.ui.altair_chart(bar_chart)
+        return mo.ui.altair_chart(bar_chart)
     except Exception:
         # Fallback if altair_chart not available
-        bar_chart
+        return bar_chart
     return
-
-
-if __name__ == "__main__":
     app.run()

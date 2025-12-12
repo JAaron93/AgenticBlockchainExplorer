@@ -46,7 +46,7 @@ def _safe_decimal(value) -> Optional[Decimal]:
         return None
 
 
-def _parse_timestamp(ts_str: str) -> Optional[datetime]:
+def _parse_timestamp(ts_str: Optional[str]) -> Optional[datetime]:
     """
     Parse ISO8601 timestamp string to datetime.
     

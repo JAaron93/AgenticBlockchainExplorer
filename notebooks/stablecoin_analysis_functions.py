@@ -38,12 +38,17 @@ def analyze_activity_types(df: pd.DataFrame) -> ActivityBreakdown:
 
     Requirements: 2.1, 2.3
     """
+    # Validate required columns
+    required_columns = {'activity_type', 'amount'}
+    if not required_columns.issubset(df.columns):
+        missing = required_columns - set(df.columns)
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
     # Initialize with zeros for all activity types
     counts: Dict[str, int] = {at: 0 for at in ACTIVITY_TYPES}
     volumes: Dict[str, Decimal] = {at: Decimal("0") for at in ACTIVITY_TYPES}
     percentages: Dict[str, float] = {at: 0.0 for at in ACTIVITY_TYPES}
     volume_pcts: Dict[str, float] = {at: 0.0 for at in ACTIVITY_TYPES}
-
     # Handle empty DataFrame
     if df.empty:
         return ActivityBreakdown(
@@ -59,14 +64,16 @@ def analyze_activity_types(df: pd.DataFrame) -> ActivityBreakdown:
         if activity_type in count_series.index:
             counts[activity_type] = int(count_series[activity_type])
 
-    # Calculate total count for percentages
-    total_count = sum(counts.values())
+    # Use total rows in DataFrame for percentage calculation
+    # This ensures percentages are based on all transactions, including any
+    # with unknown activity types (though schema validation should prevent this)
+    total_rows = len(df)
 
-    # Calculate percentages
+    # Calculate percentages based on total rows
     for activity_type in ACTIVITY_TYPES:
-        if total_count > 0:
+        if total_rows > 0:
             percentages[activity_type] = (
-                counts[activity_type] / total_count * 100.0
+                counts[activity_type] / total_rows * 100.0
             )
 
     # Calculate volumes by activity type
