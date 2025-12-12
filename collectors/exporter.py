@@ -3,15 +3,22 @@
 Exports aggregated data to JSON files and persists results to database.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
 from collectors.aggregator import AggregatedData
-from core.db_manager import DatabaseManager
 
+# Use TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
+    from core.db_manager import DatabaseManager
+
+
+# Use standard logging to avoid circular imports
 logger = logging.getLogger(__name__)
 
 # Agent version for metadata

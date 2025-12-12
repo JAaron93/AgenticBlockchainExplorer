@@ -16,50 +16,13 @@ from config.loader import ConfigurationManager
 from config.models import Config
 from core.auth0_manager import init_auth0, close_auth0
 from core.database import init_database, close_database
+from core.logging import configure_logging, get_logger
 
 # Global config reference
 _config: Config | None = None
 
 # Deferred logger - will be configured after config is loaded
 logger: logging.Logger | None = None
-
-
-def _configure_logging(level: str = "INFO", fmt: str = "json") -> None:
-    """Configure logging with the specified level and format.
-
-    Args:
-        level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        fmt: Log format ('json' or 'text')
-    """
-    global logger
-
-    log_level = getattr(logging, level.upper(), logging.INFO)
-
-    # Get root logger and clear existing handlers
-    root_logger = logging.getLogger()
-    root_logger.handlers.clear()
-    root_logger.setLevel(log_level)
-
-    # Create handler
-    handler = logging.StreamHandler()
-    handler.setLevel(log_level)
-
-    if fmt == "json":
-        from pythonjsonlogger import jsonlogger
-
-        formatter = jsonlogger.JsonFormatter(
-            "%(asctime)s %(name)s %(levelname)s %(message)s",
-            rename_fields={"asctime": "time", "levelname": "level"},
-        )
-    else:
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-
-    handler.setFormatter(formatter)
-    root_logger.addHandler(handler)
-
-    logger = logging.getLogger(__name__)
 
 
 def get_config() -> Config:
@@ -80,15 +43,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _config = config_manager.load_config()
         config_manager.validate_config(_config)
 
-        # Configure logging with settings from config
-        _configure_logging(
+        # Configure structured logging with settings from config
+        configure_logging(
             level=_config.logging.level,
             fmt=_config.logging.format,
+            service_name="blockchain-stablecoin-explorer"
         )
+        logger = get_logger(__name__)
 
         # Now we can log startup messages with the correct level
         logger.info("Starting Blockchain Stablecoin Explorer...")
-        logger.info("Configuration loaded successfully")
+        logger.info("Configuration loaded successfully", extra={
+            "explorers": [e.name for e in _config.explorers],
+            "stablecoins": list(_config.stablecoins.keys()),
+            "environment": _config.app.env,
+        })
 
         # Initialize database
         await init_database(_config.database)
@@ -103,8 +72,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         # Ensure we have a logger even if config failed
         if logger is None:
-            _configure_logging()
-        logger.error(f"Failed to start application: {e}")
+            configure_logging()
+            logger = get_logger(__name__)
+        logger.error(f"Failed to start application: {e}", exc_info=True)
         raise
 
     yield
@@ -130,7 +100,16 @@ app = FastAPI(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Global exception handler for unhandled errors."""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    if logger:
+        logger.error(
+            f"Unhandled exception: {exc}",
+            exc_info=True,
+            extra={
+                "path": str(request.url.path),
+                "method": request.method,
+                "error_type": type(exc).__name__,
+            }
+        )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "An internal error occurred"},

@@ -18,7 +18,7 @@ from core.auth0_manager import (
     get_auth0_manager,
     close_auth0,
 )
-from core.orchestrator import AgentOrchestrator, CollectionReport
+from core.orchestrator import AgentOrchestrator, CollectionReport, RunConfig
 
 __all__ = [
     # Database
@@ -42,4 +42,5 @@ __all__ = [
     # Orchestrator
     "AgentOrchestrator",
     "CollectionReport",
+    "RunConfig",
 ]

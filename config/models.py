@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator, HttpUrl
 from enum import Enum
 from eth_utils import is_address, to_checksum_address
 
+# Use standard logging here since this module is loaded before our logging is configured
 logger = logging.getLogger(__name__)
 
 

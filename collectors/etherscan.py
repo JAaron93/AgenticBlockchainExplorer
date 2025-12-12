@@ -10,6 +10,7 @@ from collectors.base import ExplorerCollector
 from collectors.models import Transaction, Holder, ActivityType
 
 
+# Use standard logging to avoid circular imports
 logger = logging.getLogger(__name__)
 
 

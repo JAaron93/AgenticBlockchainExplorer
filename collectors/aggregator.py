@@ -7,6 +7,7 @@ from decimal import Decimal
 from collectors.models import Transaction, Holder, ExplorerData, ActivityType
 
 
+# Use standard logging to avoid circular imports
 logger = logging.getLogger(__name__)
 
 

@@ -13,6 +13,8 @@ from sqlalchemy import select, update, desc
 from models.database import User, AgentRun, RunResult, AuditLog, RunStatus
 from core.database import DatabaseConnection
 
+
+# Use standard logging to avoid circular imports
 logger = logging.getLogger(__name__)
 
 

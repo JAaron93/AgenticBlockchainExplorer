@@ -33,7 +33,7 @@ from core.auth0_manager import (
 )
 from core.database import get_database
 from core.db_manager import DatabaseManager, InvalidUUIDError
-from core.orchestrator import AgentOrchestrator
+from core.orchestrator import AgentOrchestrator, RunConfig
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +305,7 @@ async def logout(
 async def run_agent_task(
     run_id: str,
     user_id: str,
-    config: Optional[Dict[str, Any]],
+    run_config_dict: Optional[Dict[str, Any]],
 ) -> None:
     """Background task to run the agent.
 
@@ -314,6 +314,12 @@ async def run_agent_task(
 
     Orchestrates data collection from blockchain explorers, classifies
     activities, aggregates results, and exports to JSON and database.
+
+    Args:
+        run_id: Unique identifier for this run.
+        user_id: ID of the user who initiated the run.
+        run_config_dict: Optional run-specific configuration overrides
+            (max_records_per_explorer, explorers, stablecoins).
     """
     # Import here to avoid circular imports
     from main import get_config
@@ -326,17 +332,33 @@ async def run_agent_task(
         # Get application configuration
         app_config = get_config()
 
+        # Build run-specific config from the request
+        run_config = None
+        if run_config_dict:
+            run_config = RunConfig(
+                max_records_per_explorer=run_config_dict.get(
+                    "max_records_per_explorer"
+                ),
+                explorers=run_config_dict.get("explorers"),
+                stablecoins=run_config_dict.get("stablecoins"),
+            )
+
         logger.info(
             f"Agent run {run_id} started for user {user_id}",
-            extra={"run_id": run_id, "user_id": user_id}
+            extra={
+                "run_id": run_id,
+                "user_id": user_id,
+                "run_config": run_config_dict,
+            }
         )
 
-        # Create and run the orchestrator
+        # Create and run the orchestrator with run-specific overrides
         orchestrator = AgentOrchestrator(
             config=app_config,
             run_id=run_id,
             db_manager=db_manager,
             user_id=user_id,
+            run_config=run_config,
         )
 
         report = await orchestrator.run()
@@ -411,7 +433,7 @@ async def trigger_agent_run(
         run_agent_task,
         run_id=run_id,
         user_id=user.user_id,
-        config=run_config,
+        run_config_dict=run_config,
     )
     
     started_at = datetime.now(timezone.utc).isoformat()

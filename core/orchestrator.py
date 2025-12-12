@@ -21,7 +21,18 @@ from collectors.aggregator import DataAggregator, AggregatedData
 from collectors.exporter import JSONExporter
 from core.db_manager import DatabaseManager
 
+
+# Use standard logging - will be configured by core.logging when app starts
 logger = logging.getLogger(__name__)
+
+
+def _set_run_id(run_id: Optional[str]) -> None:
+    """Set run_id in logging context if core.logging is available."""
+    try:
+        from core.logging import set_run_id
+        set_run_id(run_id)
+    except ImportError:
+        pass  # core.logging not available, skip
 
 
 # Type alias for collector classes
@@ -72,6 +83,15 @@ class CollectionReport:
         }
 
 
+@dataclass
+class RunConfig:
+    """Run-specific configuration overrides."""
+
+    max_records_per_explorer: Optional[int] = None
+    explorers: Optional[list[str]] = None
+    stablecoins: Optional[list[str]] = None
+
+
 class AgentOrchestrator:
     """Orchestrates data collection from blockchain explorers.
 
@@ -86,6 +106,7 @@ class AgentOrchestrator:
         run_id: str,
         db_manager: Optional[DatabaseManager] = None,
         user_id: Optional[str] = None,
+        run_config: Optional[RunConfig] = None,
     ):
         """Initialize the orchestrator.
 
@@ -94,11 +115,13 @@ class AgentOrchestrator:
             run_id: Unique identifier for this run.
             db_manager: Database manager for persistence.
             user_id: Optional user ID who initiated the run.
+            run_config: Optional run-specific configuration overrides.
         """
         self._config = config
         self._run_id = run_id
         self._db_manager = db_manager
         self._user_id = user_id
+        self._run_config = run_config or RunConfig()
         self._collectors: list[ExplorerCollector] = []
         self._classifier = ActivityClassifier()
         self._aggregator = DataAggregator()
@@ -140,11 +163,24 @@ class AgentOrchestrator:
     def _initialize_collectors(self) -> list[ExplorerCollector]:
         """Initialize collector instances from configuration.
 
+        Respects run_config.explorers filter if specified.
+
         Returns:
             List of initialized collectors.
         """
         collectors = []
+        allowed_explorers = self._run_config.explorers
+
         for explorer_config in self._config.explorers:
+            # Filter by explorer names if specified in run config
+            if allowed_explorers is not None:
+                if explorer_config.name not in allowed_explorers:
+                    logger.debug(
+                        f"Skipping {explorer_config.name} (not in run config)",
+                        extra={"run_id": self._run_id}
+                    )
+                    continue
+
             collector = self._create_collector(explorer_config)
             if collector:
                 collectors.append(collector)
@@ -161,6 +197,8 @@ class AgentOrchestrator:
     def _get_stablecoin_addresses(self, chain: str) -> dict[str, str]:
         """Get stablecoin contract addresses for a chain.
 
+        Respects run_config.stablecoins filter if specified.
+
         Args:
             chain: The blockchain chain name.
 
@@ -168,7 +206,14 @@ class AgentOrchestrator:
             Dict mapping stablecoin symbol to contract address.
         """
         addresses = {}
+        allowed_stablecoins = self._run_config.stablecoins
+
         for symbol, config in self._config.stablecoins.items():
+            # Filter by stablecoin symbols if specified in run config
+            if allowed_stablecoins is not None:
+                if symbol not in allowed_stablecoins:
+                    continue
+
             address = getattr(config, chain, None)
             if address:
                 addresses[symbol] = address
@@ -210,14 +255,23 @@ class AgentOrchestrator:
     ) -> ExplorerData:
         """Collect data from a single explorer.
 
+        Implements graceful error handling to return partial results
+        when collection partially fails. The explorer is considered
+        successful if any data was collected, even with errors.
+
         Args:
             collector: The collector to use.
 
         Returns:
-            ExplorerData with collected transactions and holders.
+            ExplorerData with collected transactions and holders,
+            including any errors encountered.
         """
         stablecoins = self._get_stablecoin_addresses(collector.chain)
-        max_records = self._config.output.max_records_per_explorer
+        # Use run config override if specified, otherwise use app config
+        max_records = (
+            self._run_config.max_records_per_explorer
+            or self._config.output.max_records_per_explorer
+        )
 
         logger.info(
             f"Starting collection from {collector.name}",
@@ -226,6 +280,7 @@ class AgentOrchestrator:
                 "explorer": collector.name,
                 "chain": collector.chain,
                 "stablecoins": list(stablecoins.keys()),
+                "max_records": max_records,
             }
         )
 
@@ -236,13 +291,54 @@ class AgentOrchestrator:
                     max_records=max_records,
                     run_id=self._run_id
                 )
+            
+            # Log result summary
+            if result.errors:
+                logger.warning(
+                    f"Collection from {collector.name} completed with {len(result.errors)} errors",
+                    extra={
+                        "run_id": self._run_id,
+                        "explorer": collector.name,
+                        "total_records": result.total_records,
+                        "error_count": len(result.errors),
+                        "partial_success": result.total_records > 0,
+                    }
+                )
+            else:
+                logger.info(
+                    f"Collection from {collector.name} completed successfully",
+                    extra={
+                        "run_id": self._run_id,
+                        "explorer": collector.name,
+                        "total_records": result.total_records,
+                    }
+                )
+            
             return result
-        except Exception as e:
+            
+        except asyncio.TimeoutError as e:
+            error_msg = f"Collection timed out for {collector.name}"
             logger.error(
-                f"Collection failed for {collector.name}: {e}",
+                error_msg,
                 extra={
                     "run_id": self._run_id,
                     "explorer": collector.name,
+                    "error_type": "timeout",
+                }
+            )
+            return ExplorerData(
+                explorer_name=collector.name,
+                chain=collector.chain,
+                errors=[error_msg]
+            )
+        except Exception as e:
+            error_msg = f"Collection failed for {collector.name}: {type(e).__name__}: {e}"
+            logger.error(
+                error_msg,
+                extra={
+                    "run_id": self._run_id,
+                    "explorer": collector.name,
+                    "error_type": type(e).__name__,
                     "error": str(e),
                 },
                 exc_info=True
@@ -250,7 +346,7 @@ class AgentOrchestrator:
             return ExplorerData(
                 explorer_name=collector.name,
                 chain=collector.chain,
-                errors=[f"Collection failed: {e}"]
+                errors=[error_msg]
             )
 
     async def collect_from_all_explorers(self) -> list[ExplorerData]:
@@ -393,6 +489,9 @@ class AgentOrchestrator:
             CollectionReport with results summary.
         """
         start_time = time.time()
+        
+        # Set run_id in logging context for correlation
+        _set_run_id(self._run_id)
 
         logger.info(
             f"Starting agent run {self._run_id}",
@@ -468,6 +567,7 @@ class AgentOrchestrator:
                 extra={
                     "run_id": self._run_id,
                     "error": str(e),
+                    "error_type": type(e).__name__,
                     "duration_seconds": duration,
                 },
                 exc_info=True
@@ -488,3 +588,7 @@ class AgentOrchestrator:
                 errors=[str(e)],
                 duration_seconds=duration,
             )
+        
+        finally:
+            # Clear run_id from logging context
+            _set_run_id(None)
