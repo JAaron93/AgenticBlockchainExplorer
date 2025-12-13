@@ -206,7 +206,7 @@ def holder_analysis_step(
     Args:
         holders_df: DataFrame with holder data including 'is_store_of_value',
             'balance', and optionally 'holding_period_days' columns
-        transactions_df: DataFrame with transaction data (for future use)
+        transactions_df: DataFrame with transaction data for holder analysis
         top_n: Number of top holders to include (default: 10)
             
     Returns:

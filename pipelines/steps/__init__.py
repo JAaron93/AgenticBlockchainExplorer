@@ -19,6 +19,18 @@ from pipelines.steps.analysis import (
     ChainAnalysisOutput,
 )
 
+from pipelines.steps.ml import (
+    feature_engineering_step,
+    train_sov_predictor_step,
+    predict_sov_step,
+    FeatureEngineeringOutput,
+    SoVModelOutput,
+    SoVPredictionOutput,
+    REQUIRED_FEATURES,
+    compute_holder_features,
+    validate_features,
+)
+
 __all__ = [
     # Collector steps
     "etherscan_collector_step",
@@ -35,4 +47,14 @@ __all__ = [
     "ActivityAnalysisOutput",
     "HolderAnalysisOutput",
     "ChainAnalysisOutput",
+    # ML steps
+    "feature_engineering_step",
+    "train_sov_predictor_step",
+    "predict_sov_step",
+    "FeatureEngineeringOutput",
+    "SoVModelOutput",
+    "SoVPredictionOutput",
+    "REQUIRED_FEATURES",
+    "compute_holder_features",
+    "validate_features",
 ]

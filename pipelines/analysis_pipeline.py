@@ -58,7 +58,7 @@ def analysis_pipeline(
     holders_df: pd.DataFrame,
     aggregation: str = "daily",
     top_n_holders: int = 10,
-) -> tuple:
+) -> AnalysisPipelineOutput:
     """Pipeline to run all analysis steps on stablecoin data.
     
     This pipeline chains all analysis steps to produce comprehensive
@@ -71,8 +71,8 @@ def analysis_pipeline(
         top_n_holders: Number of top holders to include in analysis
     
     Returns:
-        Tuple of (activity_output, holder_output, time_series_df, chain_output)
-        All outputs are versioned ZenML artifacts.
+        AnalysisPipelineOutput containing all analysis results as
+        versioned ZenML artifacts.
     
     Requirements: 10.2, 10.4
     """
@@ -89,7 +89,7 @@ def analysis_pipeline(
     )
     
     # Run time series analysis
-    time_series_df = time_series_step(
+    ts_df = time_series_step(
         transactions_df=transactions_df,
         aggregation=aggregation,
     )
@@ -100,7 +100,16 @@ def analysis_pipeline(
         holders_df=holders_df,
     )
     
-    return activity_output, holder_output, time_series_df, chain_output
+    return AnalysisPipelineOutput(
+        activity_breakdown=activity_output,
+        holder_metrics=holder_output,
+        time_series_df=ts_df,
+        chain_metrics=chain_output,
+        run_metadata={
+            "aggregation": aggregation,
+            "top_n_holders": top_n_holders,
+        },
+    )
 
 
 # Convenience function to run the pipeline
@@ -119,7 +128,7 @@ def run_analysis_pipeline(
         top_n_holders: Number of top holders to include
         
     Returns:
-        Pipeline run result with all analysis outputs
+        PipelineRunResponse from ZenML pipeline execution
     """
     return analysis_pipeline(
         transactions_df=transactions_df,

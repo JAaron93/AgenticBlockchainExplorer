@@ -961,3 +961,494 @@ class TestPipelineArtifactVersioning:
         assert chain_total == len(transactions), (
             f"Chain total ({chain_total}) != transaction count ({len(transactions)})"
         )
+
+
+class TestFeatureEngineeringCompleteness:
+    """Tests for feature engineering completeness (Property 16)."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=1, max_size=20),
+        transactions=st.lists(valid_transaction_model(), min_size=0, max_size=30),
+    )
+    def test_property_16_feature_engineering_produces_all_required_features(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 16: Feature engineering completeness**
+
+        For any holder with transaction history, the feature engineering step
+        SHALL produce a feature vector with all required fields:
+        - transaction_count
+        - avg_transaction_size
+        - balance_percentile
+        - holding_period_days
+        - activity_recency_days
+        - transaction_frequency
+        - balance_volatility
+        - cross_chain_flag
+
+        **Validates: Requirements 11.1, 12.2**
+        """
+        from pipelines.steps.ml import (
+            feature_engineering_step,
+            REQUIRED_FEATURES,
+            FeatureEngineeringOutput,
+        )
+
+        # Set consistent chains for data
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering step
+        result = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        # Verify output type
+        assert isinstance(result, FeatureEngineeringOutput), (
+            f"Expected FeatureEngineeringOutput, got {type(result)}"
+        )
+
+        # Verify all required features are present in the DataFrame
+        for feat in REQUIRED_FEATURES:
+            assert feat in result.features_df.columns, (
+                f"Required feature '{feat}' missing from features DataFrame"
+            )
+
+        # Verify feature_names list matches REQUIRED_FEATURES
+        assert set(result.feature_names) == set(REQUIRED_FEATURES), (
+            f"feature_names {result.feature_names} != REQUIRED_FEATURES {REQUIRED_FEATURES}"
+        )
+
+        # Verify holder count matches
+        assert result.holder_count == len(holders), (
+            f"holder_count ({result.holder_count}) != input holders ({len(holders)})"
+        )
+
+        # Verify each holder has a feature vector
+        assert len(result.features_df) == len(holders), (
+            f"Feature rows ({len(result.features_df)}) != holders ({len(holders)})"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(holders=st.lists(valid_holder_model(), min_size=1, max_size=20))
+    def test_property_16_feature_values_are_valid(self, holders):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 16: Feature engineering completeness**
+
+        For any holder, all extracted feature values SHALL be valid:
+        - transaction_count >= 0
+        - avg_transaction_size >= 0
+        - balance_percentile in [0, 100]
+        - holding_period_days >= 0
+        - activity_recency_days >= 0
+        - transaction_frequency >= 0
+        - balance_volatility >= 0
+        - cross_chain_flag in {0, 1}
+
+        **Validates: Requirements 11.1, 12.2**
+        """
+        from pipelines.steps.ml import (
+            feature_engineering_step,
+            REQUIRED_FEATURES,
+        )
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe([])  # Empty transactions
+
+        # Run feature engineering
+        result = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        df = result.features_df
+
+        # Verify non-negative features
+        non_negative_features = [
+            "transaction_count",
+            "avg_transaction_size",
+            "holding_period_days",
+            "activity_recency_days",
+            "transaction_frequency",
+            "balance_volatility",
+        ]
+        for feat in non_negative_features:
+            assert (df[feat] >= 0).all(), (
+                f"Feature '{feat}' has negative values: {df[feat].min()}"
+            )
+
+        # Verify balance_percentile is in [0, 100]
+        assert (df["balance_percentile"] >= 0).all(), (
+            f"balance_percentile has values < 0: {df['balance_percentile'].min()}"
+        )
+        assert (df["balance_percentile"] <= 100).all(), (
+            f"balance_percentile has values > 100: {df['balance_percentile'].max()}"
+        )
+
+        # Verify cross_chain_flag is binary
+        assert df["cross_chain_flag"].isin([0, 1]).all(), (
+            f"cross_chain_flag has non-binary values: {df['cross_chain_flag'].unique()}"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=1, max_size=15),
+        transactions=st.lists(valid_transaction_model(), min_size=1, max_size=30),
+    )
+    def test_property_16_feature_engineering_is_deterministic(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 16: Feature engineering completeness**
+
+        For any input data, running feature engineering twice SHALL produce
+        identical feature vectors.
+
+        **Validates: Requirements 11.1, 12.2**
+        """
+        import numpy as np
+        from pipelines.steps.ml import compute_holder_features
+        from datetime import datetime, timezone
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Use fixed reference date for determinism
+        ref_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+        # Run feature engineering twice
+        result1 = compute_holder_features(holders_df, transactions_df, ref_date)
+        result2 = compute_holder_features(holders_df, transactions_df, ref_date)
+
+        # Verify results are identical
+        assert result1.shape == result2.shape, (
+            f"Shape mismatch: {result1.shape} vs {result2.shape}"
+        )
+
+        # Compare all columns
+        for col in result1.columns:
+            if col == "address":
+                continue  # Skip address comparison
+            # Use numpy allclose for numeric comparison
+            assert np.allclose(
+                result1[col].values,
+                result2[col].values,
+                rtol=1e-10,
+                equal_nan=True,
+            ), f"Column '{col}' differs between runs"
+
+    @settings(max_examples=50, deadline=None)
+    @given(holders=st.lists(valid_holder_model(), min_size=1, max_size=10))
+    def test_property_16_empty_transactions_produces_valid_features(self, holders):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 16: Feature engineering completeness**
+
+        For any set of holders with no transactions, feature engineering SHALL
+        still produce valid feature vectors with appropriate default values.
+
+        **Validates: Requirements 11.1, 12.2**
+        """
+        from pipelines.steps.ml import (
+            feature_engineering_step,
+            REQUIRED_FEATURES,
+        )
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe([])  # Empty transactions
+
+        # Run feature engineering
+        result = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        # Verify all features are present
+        for feat in REQUIRED_FEATURES:
+            assert feat in result.features_df.columns, (
+                f"Required feature '{feat}' missing with empty transactions"
+            )
+
+        # Verify transaction-based features are zero
+        assert (result.features_df["transaction_count"] == 0).all(), (
+            "transaction_count should be 0 with no transactions"
+        )
+        assert (result.features_df["avg_transaction_size"] == 0).all(), (
+            "avg_transaction_size should be 0 with no transactions"
+        )
+        assert (result.features_df["balance_volatility"] == 0).all(), (
+            "balance_volatility should be 0 with no transactions"
+        )
+        assert (result.features_df["cross_chain_flag"] == 0).all(), (
+            "cross_chain_flag should be 0 with no transactions"
+        )
+
+
+
+class TestSoVPredictionProbabilityBounds:
+    """Tests for SoV prediction probability bounds (Property 17)."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=10, max_size=30),
+        transactions=st.lists(valid_transaction_model(), min_size=5, max_size=50),
+    )
+    def test_property_17_sov_prediction_probabilities_in_valid_range(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 17: SoV prediction probability bounds**
+
+        For any holder, the SoV prediction probability SHALL be in the range [0.0, 1.0].
+
+        **Validates: Requirements 11.5**
+        """
+        from pipelines.steps.ml import (
+            feature_engineering_step,
+            train_sov_predictor_step,
+            predict_sov_step,
+        )
+
+        # Ensure we have enough holders with both SoV classes for training
+        # Set at least 30% as SoV to ensure stratified split works
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+            # Ensure balanced classes
+            is_sov = i % 3 == 0  # ~33% SoV
+            object.__setattr__(h, 'is_store_of_value', is_sov)
+
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        # Skip if not enough samples for training
+        assume(len(features_output.features_df) >= 10)
+
+        # Train model (use RandomForest to avoid XGBoost dependency issues)
+        try:
+            model_output = train_sov_predictor_step.entrypoint(
+                features_df=features_output.features_df,
+                holders_df=holders_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+                test_size=0.2,
+            )
+        except ValueError:
+            # Skip if training fails due to insufficient data
+            assume(False)
+            return
+
+        # Run inference
+        predictions_output = predict_sov_step.entrypoint(
+            features_df=features_output.features_df,
+            model=model_output.model,
+        )
+
+        # Verify all probabilities are in [0.0, 1.0]
+        probs = predictions_output.predictions_df['sov_probability']
+
+        assert (probs >= 0.0).all(), (
+            f"Found probability < 0.0: min={probs.min()}"
+        )
+        assert (probs <= 1.0).all(), (
+            f"Found probability > 1.0: max={probs.max()}"
+        )
+
+    @settings(max_examples=50, deadline=None)
+    @given(holders=st.lists(valid_holder_model(), min_size=5, max_size=15))
+    def test_property_17_empty_transactions_still_produces_valid_probabilities(
+        self, holders
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 17: SoV prediction probability bounds**
+
+        For any set of holders with no transactions, SoV prediction SHALL still
+        produce valid probabilities in [0.0, 1.0].
+
+        **Validates: Requirements 11.5**
+        """
+        from pipelines.steps.ml import (
+            feature_engineering_step,
+            train_sov_predictor_step,
+            predict_sov_step,
+        )
+
+        # Set consistent chains and ensure balanced classes
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+            is_sov = i % 3 == 0
+            object.__setattr__(h, 'is_store_of_value', is_sov)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe([])  # Empty transactions
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        # Skip if not enough samples
+        assume(len(features_output.features_df) >= 5)
+
+        # Train model
+        try:
+            model_output = train_sov_predictor_step.entrypoint(
+                features_df=features_output.features_df,
+                holders_df=holders_df,
+                algorithm='random_forest',
+                n_estimators=10,
+                max_depth=3,
+                test_size=0.2,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Run inference
+        predictions_output = predict_sov_step.entrypoint(
+            features_df=features_output.features_df,
+            model=model_output.model,
+        )
+
+        # Verify probabilities are valid
+        probs = predictions_output.predictions_df['sov_probability']
+        assert (probs >= 0.0).all() and (probs <= 1.0).all(), (
+            f"Probabilities out of range: min={probs.min()}, max={probs.max()}"
+        )
+
+    @settings(max_examples=50, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=15, max_size=30),
+        transactions=st.lists(valid_transaction_model(), min_size=10, max_size=40),
+    )
+    def test_property_17_prediction_output_has_required_columns(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 17: SoV prediction probability bounds**
+
+        For any prediction output, the DataFrame SHALL contain required columns:
+        - address
+        - sov_probability
+        - predicted_class
+
+        **Validates: Requirements 11.5**
+        """
+        from pipelines.steps.ml import (
+            feature_engineering_step,
+            train_sov_predictor_step,
+            predict_sov_step,
+            SoVPredictionOutput,
+        )
+
+        # Set consistent chains and balanced classes
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+            is_sov = i % 3 == 0
+            object.__setattr__(h, 'is_store_of_value', is_sov)
+
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        assume(len(features_output.features_df) >= 10)
+
+        # Train model
+        try:
+            model_output = train_sov_predictor_step.entrypoint(
+                features_df=features_output.features_df,
+                holders_df=holders_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Run inference
+        predictions_output = predict_sov_step.entrypoint(
+            features_df=features_output.features_df,
+            model=model_output.model,
+        )
+
+        # Verify output type
+        assert isinstance(predictions_output, SoVPredictionOutput), (
+            f"Expected SoVPredictionOutput, got {type(predictions_output)}"
+        )
+
+        # Verify required columns
+        required_columns = ['address', 'sov_probability', 'predicted_class']
+        for col in required_columns:
+            assert col in predictions_output.predictions_df.columns, (
+                f"Required column '{col}' missing from predictions"
+            )
+
+        # Verify prediction count matches
+        assert predictions_output.prediction_count == len(features_output.features_df), (
+            f"Prediction count ({predictions_output.prediction_count}) != "
+            f"feature count ({len(features_output.features_df)})"
+        )
+
+        # Verify predicted_class is boolean
+        assert predictions_output.predictions_df['predicted_class'].dtype == bool, (
+            f"predicted_class should be bool, got "
+            f"{predictions_output.predictions_df['predicted_class'].dtype}"
+        )

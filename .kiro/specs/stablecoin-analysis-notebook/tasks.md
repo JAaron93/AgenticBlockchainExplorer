@@ -189,27 +189,27 @@
     - **Property 15: Pipeline artifact versioning**
     - **Validates: Requirements 10.2**
 
-- [ ] 12. Implement ML feature engineering and SoV prediction
-  - [ ] 12.1 Create feature engineering step
+- [x] 12. Implement ML feature engineering and SoV prediction
+  - [x] 12.1 Create feature engineering step
     - Create `pipelines/steps/ml.py`
     - Implement `feature_engineering_step`
     - Extract features: transaction_count, avg_transaction_size, balance_percentile, holding_period_days, activity_recency_days, transaction_frequency, balance_volatility, cross_chain_flag
     - _Requirements: 11.1, 12.2_
-  - [ ] 12.2 Write property test for feature engineering completeness
+  - [x] 12.2 Write property test for feature engineering completeness
     - **Property 16: Feature engineering completeness**
     - **Validates: Requirements 11.1, 12.2**
-  - [ ] 12.3 Implement SoV prediction training step
+  - [x] 12.3 Implement SoV prediction training step
     - Implement `train_sov_predictor_step`
     - Use RandomForest or XGBoost binary classifier
     - Calculate and log precision, recall, F1, AUC-ROC
     - Register model in ZenML model registry
     - _Requirements: 11.2, 11.3, 11.4_
-  - [ ] 12.4 Implement SoV prediction inference step
+  - [x] 12.4 Implement SoV prediction inference step
     - Implement `predict_sov_step`
     - Load production model from registry
     - Output predictions with probabilities
     - _Requirements: 11.5_
-  - [ ] 12.5 Write property test for SoV prediction probability bounds
+  - [x] 12.5 Write property test for SoV prediction probability bounds
     - **Property 17: SoV prediction probability bounds**
     - **Validates: Requirements 11.5**
 

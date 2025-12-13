@@ -87,7 +87,7 @@ def run_collection_pipeline(
     date_range_days: int = 7,
     max_records: int = 1000,
     min_successful_collectors: int = 2,
-):
+) -> AggregatedOutput:
     """Run the collection pipeline with specified parameters.
     
     Args:
