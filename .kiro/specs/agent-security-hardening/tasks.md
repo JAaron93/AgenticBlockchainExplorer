@@ -1,0 +1,265 @@
+# Implementation Plan
+
+## High Priority Tasks
+
+- [ ] 1. Implement Credential Sanitization
+  - [ ] 1.1 Create CredentialSanitizerConfig model in config/models.py
+    - Add sensitive_param_names, sensitive_header_names, credential_patterns fields
+    - Add redaction_placeholder field with default "[REDACTED]"
+    - _Requirements: 1.6, 1.7, 1.8, 1.9_
+  - [ ] 1.2 Implement CredentialSanitizer class in core/security/credential_sanitizer.py
+    - Implement sanitize() method for string sanitization
+    - Implement sanitize_dict() for recursive dictionary sanitization
+    - Implement sanitize_url() for URL query parameter sanitization
+    - Implement is_credential() for key-value credential detection
+    - _Requirements: 1.1, 1.2, 1.5_
+  - [ ]* 1.3 Write property test for credential sanitization completeness
+    - **Property 1: Credential Sanitization Completeness**
+    - **Validates: Requirements 1.1, 1.2, 1.3, 1.5**
+  - [ ] 1.4 Implement SecureLogger class in core/security/secure_logger.py
+    - Wrap standard logger with sanitization on all output methods
+    - Implement exception() with stack trace sanitization
+    - _Requirements: 1.3, 1.4_
+  - [ ]* 1.5 Write unit tests for SecureLogger
+    - Test info/warning/error sanitization
+    - Test exception stack trace filtering
+    - _Requirements: 1.3, 1.4_
+
+- [ ] 2. Implement SSRF Protection
+  - [ ] 2.1 Create SSRFProtectionConfig model in config/models.py
+    - Add allowed_domains list with default explorer domains
+    - Add require_https and block_private_ips flags
+    - _Requirements: 2.2, 2.3_
+  - [ ] 2.2 Implement DomainAllowlist class in core/security/ssrf_protector.py
+    - Implement pattern matching for exact and wildcard domains
+    - Implement is_allowed() and validate_url() methods
+    - Implement from_config() class method
+    - _Requirements: 2.1, 2.7, 2.10_
+  - [ ]* 2.3 Write property test for domain allowlist enforcement
+    - **Property 2: Domain Allowlist Enforcement**
+    - **Validates: Requirements 2.4, 2.5, 2.6**
+  - [ ] 2.4 Implement SSRFProtector class with private IP ranges
+    - Define comprehensive PRIVATE_IP_RANGES list (IPv4 and IPv6)
+    - Implement _is_private_ip() method
+    - Implement validate_request() with domain and protocol checks
+    - _Requirements: 2.4, 2.5, 2.6_
+  - [ ]* 2.5 Write property test for private IP blocking
+    - **Property 3: Private IP Blocking**
+    - **Validates: Requirements 2.9**
+  - [ ] 2.6 Implement DNS rebinding protection in SSRFProtector
+    - Implement _resolve_and_validate() with DNS pinning
+    - Implement validate_redirect() with rebinding detection
+    - Implement _is_rebinding_attempt() method
+    - _Requirements: 2.8, 2.9_
+  - [ ]* 2.7 Write unit tests for DNS rebinding protection
+    - Test DNS resolution pinning
+    - Test rebinding detection (public→private)
+    - Test redirect validation
+    - _Requirements: 2.8, 2.9_
+
+- [ ] 3. Implement Resource Exhaustion Protection
+  - [ ] 3.1 Create ResourceLimitConfig model in config/models.py
+    - Add max_response_size_bytes (default 10MB)
+    - Add max_output_file_size_bytes (default 100MB)
+    - Add max_memory_usage_mb (default 512MB)
+    - _Requirements: 3.1, 3.5, 3.6_
+  - [ ] 3.2 Implement ResourceLimiter class in core/security/resource_limiter.py
+    - Implement check_response_size() method
+    - Implement check_memory_usage() with psutil
+    - Implement check_file_size() method
+    - Implement get_current_memory_mb() method
+    - _Requirements: 3.1, 3.2, 3.5, 3.6_
+  - [ ]* 3.3 Write property test for response size enforcement
+    - **Property 4: Response Size Enforcement**
+    - **Validates: Requirements 3.1, 3.2**
+  - [ ] 3.4 Implement GracefulTerminator class in core/security/graceful_terminator.py
+    - Implement terminate() method with task cancellation
+    - Implement _cancel_tasks() for pending task cleanup
+    - Implement _flush_results() with partial status flag
+    - _Requirements: 3.7, 3.8, 3.9, 3.10_
+  - [ ]* 3.5 Write unit tests for graceful termination
+    - Test task cancellation
+    - Test partial result persistence
+    - Test termination logging
+    - _Requirements: 3.7, 3.8, 3.9, 3.10_
+
+- [ ] 4. Checkpoint - Ensure all high priority tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Medium Priority Tasks
+
+- [ ] 5. Implement Blockchain Data Validation
+  - [ ] 5.1 Implement BlockchainDataValidator class in core/security/blockchain_validator.py
+    - Define ADDRESS_PATTERN, TX_HASH_PATTERN, AMOUNT_PATTERN regex
+    - Define GENESIS_TIMESTAMPS for supported chains
+    - Implement validate_address() method
+    - _Requirements: 4.1_
+  - [ ]* 5.2 Write property test for address validation
+    - **Property 5: Address Validation Correctness**
+    - **Validates: Requirements 4.1**
+  - [ ] 5.3 Implement transaction hash validation
+    - Implement validate_tx_hash() method
+    - _Requirements: 4.2_
+  - [ ]* 5.4 Write property test for transaction hash validation
+    - **Property 6: Transaction Hash Validation Correctness**
+    - **Validates: Requirements 4.2**
+  - [ ] 5.5 Implement amount validation with bounds checking
+    - Implement validate_amount() with pattern and 2^256-1 bound
+    - _Requirements: 4.3_
+  - [ ]* 5.6 Write property test for amount validation
+    - **Property 7: Amount Validation Correctness**
+    - **Validates: Requirements 4.3**
+  - [ ] 5.7 Implement timestamp and block number validation
+    - Implement validate_timestamp() with genesis bounds
+    - Implement validate_block_number() with future buffer
+    - _Requirements: 4.6, 4.7_
+  - [ ] 5.8 Implement address normalization
+    - Implement normalize_address() to lowercase
+    - _Requirements: 4.5_
+  - [ ]* 5.9 Write property test for address normalization idempotence
+    - **Property 8: Address Normalization Idempotence**
+    - **Validates: Requirements 4.5**
+  - [ ]* 5.10 Write unit tests for validation error handling
+    - Test skip behavior on invalid records
+    - Test warning logging with field name only
+    - _Requirements: 4.4_
+
+- [ ] 6. Implement Safe File Path Handling
+  - [ ] 6.1 Implement SafePathHandler class in core/security/safe_path_handler.py
+    - Define UNSAFE_CHARS regex pattern
+    - Implement safe_join() with path containment check
+    - Implement validate_path() method
+    - _Requirements: 5.1, 5.2_
+  - [ ]* 6.2 Write property test for path containment
+    - **Property 9: Path Containment**
+    - **Validates: Requirements 5.1, 5.2**
+  - [ ] 6.3 Implement filename sanitization
+    - Implement sanitize_filename() removing unsafe characters
+    - _Requirements: 5.3_
+  - [ ]* 6.4 Write property test for filename sanitization safety
+    - **Property 10: Filename Sanitization Safety**
+    - **Validates: Requirements 5.3**
+  - [ ] 6.5 Implement atomic file writing
+    - Implement atomic_write() using temp file and rename
+    - _Requirements: 5.5_
+  - [ ]* 6.6 Write unit tests for atomic write operations
+    - Test successful atomic write
+    - Test rollback on failure
+    - _Requirements: 5.5_
+
+- [ ] 7. Implement Collection Timeout Enforcement
+  - [ ] 7.1 Create TimeoutConfig model in config/models.py
+    - Add overall_run_timeout_seconds (default 1800)
+    - Add per_collection_timeout_seconds (default 180)
+    - Add shutdown_timeout_seconds (default 30)
+    - Add model validator for timeout relationships
+    - _Requirements: 6.4, 6.5_
+  - [ ] 7.2 Implement TimeoutManager class in core/security/timeout_manager.py
+    - Implement overall_timeout and per_collection_timeout properties
+    - Implement time_remaining() and should_terminate() methods
+    - Implement start() and run_with_timeout() methods
+    - _Requirements: 6.1, 6.2, 6.3, 6.6_
+  - [ ]* 7.3 Write unit tests for timeout management
+    - Test timeout calculation with collection count
+    - Test dynamic timeout adjustment
+    - Test should_terminate() threshold
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
+
+- [ ] 8. Checkpoint - Ensure all medium priority tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Integration Tasks
+
+- [ ] 9. Implement SecureHTTPClient
+  - [ ] 9.1 Create SecureHTTPClient class in core/security/secure_http_client.py
+    - Define ALLOWED_PARAM_KEYS for explorer APIs
+    - Implement _validate_params() method
+    - Implement _sanitize_params_for_logging() method
+    - _Requirements: 2.4, 2.5_
+  - [ ] 9.2 Implement get() method with all security validations
+    - Integrate SSRFProtector for URL validation
+    - Integrate ResourceLimiter for response size checking
+    - Integrate CredentialSanitizer for logging
+    - _Requirements: 1.1, 1.2, 2.4, 2.5, 3.1, 3.2_
+  - [ ] 9.3 Implement redirect handling with SSRF validation
+    - Implement _handle_redirect() with rebinding check
+    - _Requirements: 2.8, 2.9_
+  - [ ]* 9.4 Write integration tests for SecureHTTPClient
+    - Test parameter validation and sanitization
+    - Test SSRF protection integration
+    - Test response size limiting
+    - _Requirements: 1.1, 2.4, 2.5, 3.1_
+
+- [ ] 10. Integrate Security Components with Collectors
+  - [ ] 10.1 Update ExplorerCollector base class to use SecureHTTPClient
+    - Replace aiohttp session with SecureHTTPClient
+    - Update _make_request() to use secure client
+    - _Requirements: 1.1, 2.4, 3.1_
+  - [ ] 10.2 Integrate BlockchainDataValidator in collectors
+    - Add validation in _parse_transaction() methods
+    - Add validation in _parse_holder() methods
+    - Add address normalization
+    - _Requirements: 4.1, 4.2, 4.3, 4.5_
+  - [ ] 10.3 Update orchestrator to use TimeoutManager and GracefulTerminator
+    - Add timeout management to run() method
+    - Add graceful termination on timeout
+    - _Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6_
+  - [ ] 10.4 Update exporter to use SafePathHandler
+    - Replace direct file operations with SafePathHandler
+    - Use atomic_write() for output files
+    - _Requirements: 5.1, 5.2, 5.3, 5.5_
+  - [ ]* 10.5 Write integration tests for collector security
+    - Test end-to-end with security components
+    - Test graceful termination flow
+    - _Requirements: All_
+
+- [ ] 11. Update Configuration Loading
+  - [ ] 11.1 Add SecurityConfig to main Config model
+    - Add security field with SecurityConfig type
+    - Update config.example.json with security section
+    - _Requirements: 1.6, 1.7, 1.8, 1.9, 2.2, 2.3, 3.1, 6.4, 6.5_
+  - [ ] 11.2 Add environment variable overrides for security config
+    - Add ALLOWED_EXPLORER_DOMAINS env var support
+    - Add MAX_RESPONSE_SIZE_BYTES env var support
+    - Add OVERALL_RUN_TIMEOUT_SECONDS env var support
+    - _Requirements: 2.2, 3.1, 6.4_
+  - [ ]* 11.3 Write unit tests for security configuration loading
+    - Test default values
+    - Test environment variable overrides
+    - Test validation errors
+    - _Requirements: 1.9, 2.3, 6.5_
+
+- [ ] 12. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Optional Tasks (Lower Priority)
+
+- [ ]* 13. Implement Request Audit Trail
+  - [ ]* 13.1 Create RequestAuditLogger class
+    - Log target domain, endpoint path, timestamp for each request
+    - Log response status code and response time on completion
+    - Exclude sensitive parameters from logs
+    - Add correlation ID for request tracing
+    - _Requirements: 7.1, 7.2, 7.3, 7.4_
+  - [ ]* 13.2 Write unit tests for audit logging
+    - Test log entry format
+    - Test credential exclusion
+    - Test correlation ID propagation
+    - _Requirements: 7.1, 7.2, 7.3, 7.4_
+
+- [ ]* 14. Implement Response Caching
+  - [ ]* 14.1 Create ResponseCache class
+    - Implement TTL-based caching (default 5 minutes)
+    - Implement LRU eviction when size limit exceeded
+    - Implement cache hit/miss metrics
+    - _Requirements: 8.1, 8.2, 8.3, 8.4_
+  - [ ]* 14.2 Integrate caching with SecureHTTPClient
+    - Check cache before making external requests
+    - Store cacheable responses with TTL
+    - _Requirements: 8.1, 8.2_
+  - [ ]* 14.3 Write unit tests for response caching
+    - Test cache hit returns cached data
+    - Test cache miss makes external request
+    - Test TTL expiration
+    - Test LRU eviction
+    - _Requirements: 8.1, 8.2, 8.3, 8.4_
