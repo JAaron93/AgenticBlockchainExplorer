@@ -301,6 +301,71 @@ class CredentialSanitizerConfig(BaseModel):
     )
 
 
+class SSRFProtectionConfig(BaseModel):
+    """Configuration for SSRF (Server-Side Request Forgery) protection.
+
+    Defines the domain allowlist and security settings for outbound
+    HTTP requests to prevent SSRF attacks.
+
+    Requirements: 2.2, 2.3
+    """
+
+    allowed_domains: List[str] = Field(
+        default=[
+            "api.etherscan.io",
+            "*.etherscan.io",
+            "api.bscscan.com",
+            "*.bscscan.com",
+            "api.polygonscan.com",
+            "*.polygonscan.com",
+        ],
+        description="List of allowed domains (supports wildcard patterns)",
+    )
+    require_https: bool = Field(
+        default=True,
+        description="Require HTTPS protocol for all outbound requests",
+    )
+    block_private_ips: bool = Field(
+        default=True,
+        description="Block requests resolving to private/internal IP ranges",
+    )
+
+    @field_validator("allowed_domains")
+    @classmethod
+    def validate_allowed_domains(cls, v: List[str]) -> List[str]:
+        """Validate domain allowlist is not empty and patterns are valid."""
+        if not v:
+            raise ValueError(
+                "SSRF protection requires at least one allowed domain"
+            )
+
+        validated = []
+        for domain in v:
+            domain = domain.strip().lower()
+            if not domain:
+                raise ValueError("Domain pattern cannot be empty")
+
+            # Validate wildcard pattern syntax
+            if "*" in domain:
+                # Only allow wildcard at the start for subdomain matching
+                if not domain.startswith("*."):
+                    raise ValueError(
+                        f"Invalid wildcard pattern '{domain}': "
+                        "wildcard must be at start (e.g., '*.example.com')"
+                    )
+                # Ensure there's a valid domain after the wildcard
+                base_domain = domain[2:]  # Remove "*."
+                if not base_domain or "." not in base_domain:
+                    raise ValueError(
+                        f"Invalid wildcard pattern '{domain}': "
+                        "must have valid base domain"
+                    )
+
+            validated.append(domain)
+
+        return validated
+
+
 class Config(BaseModel):
     """Main configuration model."""
     

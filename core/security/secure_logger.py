@@ -247,18 +247,28 @@ class SecureLogger:
         sanitized_args = self._sanitize_args(args)
         sanitized_kwargs = self._sanitize_kwargs(kwargs)
 
-        # Get current exception info if not provided
+        import sys
         exc_info = kwargs.get("exc_info", True)
-
-        # Log with sanitized content
-        # Note: We let the logger handle exc_info formatting,
-        # but we've already sanitized the message and args
-        self._logger.exception(
-            sanitized_msg,
-            *sanitized_args,
-            exc_info=exc_info,
-            **{k: v for k, v in sanitized_kwargs.items() if k != "exc_info"},
-        )
+        if exc_info is True:
+            exc_info = sys.exc_info()
+        
+        # Format and sanitize the exception
+        sanitized_exc = self._format_exception_info(exc_info) if exc_info else None
+        
+        # Log error with sanitized traceback in message
+        if sanitized_exc:
+            full_msg = f"{sanitized_msg}\n{sanitized_exc}"
+            self._logger.error(
+                full_msg,
+                *sanitized_args,
+                **{k: v for k, v in sanitized_kwargs.items() if k != "exc_info"},
+            )
+        else:
+            self._logger.error(
+                sanitized_msg,
+                *sanitized_args,
+                **sanitized_kwargs,
+            )
 
     def log(
         self,

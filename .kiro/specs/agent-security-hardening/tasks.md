@@ -25,12 +25,12 @@
     - Test exception stack trace filtering
     - _Requirements: 1.3, 1.4_
 
-- [ ] 2. Implement SSRF Protection
-  - [ ] 2.1 Create SSRFProtectionConfig model in config/models.py
+- [x] 2. Implement SSRF Protection
+  - [x] 2.1 Create SSRFProtectionConfig model in config/models.py
     - Add allowed_domains list with default explorer domains
     - Add require_https and block_private_ips flags
     - _Requirements: 2.2, 2.3_
-  - [ ] 2.2 Implement DomainAllowlist class in core/security/ssrf_protector.py
+  - [x] 2.2 Implement DomainAllowlist class in core/security/ssrf_protector.py
     - Implement pattern matching for exact and wildcard domains
     - Implement is_allowed() and validate_url() methods
     - Implement from_config() class method
@@ -38,7 +38,7 @@
   - [ ]* 2.3 Write property test for domain allowlist enforcement
     - **Property 2: Domain Allowlist Enforcement**
     - **Validates: Requirements 2.4, 2.5, 2.6**
-  - [ ] 2.4 Implement SSRFProtector class with private IP ranges
+  - [x] 2.4 Implement SSRFProtector class with private IP ranges
     - Define comprehensive PRIVATE_IP_RANGES list (IPv4 and IPv6)
     - Implement _is_private_ip() method
     - Implement validate_request() with domain and protocol checks
@@ -46,7 +46,7 @@
   - [ ]* 2.5 Write property test for private IP blocking
     - **Property 3: Private IP Blocking**
     - **Validates: Requirements 2.9**
-  - [ ] 2.6 Implement DNS rebinding protection in SSRFProtector
+  - [x] 2.6 Implement DNS rebinding protection in SSRFProtector
     - Implement _resolve_and_validate() with DNS pinning
     - Implement validate_redirect() with rebinding detection
     - Implement _is_rebinding_attempt() method
