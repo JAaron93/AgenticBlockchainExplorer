@@ -1743,6 +1743,330 @@ def merge_data_sources(loaded_data, sample_data):
     return (loaded_data,)
 
 
+# =============================================================================
+# ZenML Pipeline Control UI
+# =============================================================================
+
+
+@app.cell
+def zenml_bridge_import():
+    """Import ZenML bridge for pipeline control."""
+    try:
+        from notebooks.zenml_bridge import (
+            ZenMLNotebookBridge,
+            PipelineInfo,
+            PipelineRunStatus,
+            LoadedArtifacts,
+        )
+        zenml_available = True
+    except ImportError:
+        ZenMLNotebookBridge = None
+        PipelineInfo = None
+        PipelineRunStatus = None
+        LoadedArtifacts = None
+        zenml_available = False
+    
+    return (
+        ZenMLNotebookBridge,
+        PipelineInfo,
+        PipelineRunStatus,
+        LoadedArtifacts,
+        zenml_available,
+    )
+
+
+@app.cell
+def zenml_bridge_init(ZenMLNotebookBridge, zenml_available):
+    """Initialize ZenML bridge for pipeline control."""
+    zenml_bridge = None
+    if zenml_available and ZenMLNotebookBridge is not None:
+        zenml_bridge = ZenMLNotebookBridge()
+    return (zenml_bridge,)
+
+
+@app.cell
+def pipeline_list_cell(mo, zenml_bridge, zenml_available):
+    """Display available ZenML pipelines and their status.
+    
+    Requirements: 13.1
+    """
+    if not zenml_available or zenml_bridge is None:
+        mo.md("""
+        ## 🔧 ZenML Pipeline Control
+        
+        > ⚠️ ZenML is not available. Pipeline control features are disabled.
+        > Install ZenML and configure it to enable pipeline orchestration.
+        """)
+        return (None,)
+    
+    # Get list of pipelines
+    pipelines = zenml_bridge.list_pipelines()
+    
+    if not pipelines:
+        mo.md("""
+        ## 🔧 ZenML Pipeline Control
+        
+        No pipelines found. Run a pipeline first to see it listed here.
+        """)
+        return (pipelines,)
+    
+    # Build pipeline status table
+    rows = []
+    for p in pipelines:
+        status_icon = {
+            "completed": "✅",
+            "running": "🔄",
+            "failed": "❌",
+            "never_run": "⚪",
+        }.get(p.last_run_status, "⚪")
+        
+        last_run = p.last_run_time.strftime("%Y-%m-%d %H:%M") if p.last_run_time else "Never"
+        
+        rows.append(
+            f"| {p.name} | {status_icon} {p.last_run_status or 'Never run'} | "
+            f"{last_run} | {p.total_runs} |"
+        )
+    
+    table_rows = "\n".join(rows)
+    
+    mo.md(f"""
+    ## 🔧 ZenML Pipeline Control
+    
+    ### Available Pipelines
+    
+    | Pipeline | Status | Last Run | Total Runs |
+    |----------|--------|----------|------------|
+    {table_rows}
+    """)
+    
+    return (pipelines,)
+
+
+@app.cell
+def pipeline_parameters_ui(mo, zenml_available):
+    """Create UI controls for pipeline parameters.
+    
+    Requirements: 13.2
+    """
+    if not zenml_available:
+        return (None, None, None, None)
+    
+    # Pipeline selector
+    pipeline_selector = mo.ui.dropdown(
+        options=[
+            "stablecoin_master_pipeline",
+            "stablecoin_collection_pipeline",
+            "stablecoin_analysis_pipeline",
+        ],
+        value="stablecoin_master_pipeline",
+        label="Select Pipeline",
+    )
+    
+    # Stablecoins selector
+    stablecoins_selector = mo.ui.multiselect(
+        options=["USDC", "USDT"],
+        value=["USDC", "USDT"],
+        label="Stablecoins",
+    )
+    
+    # Date range slider
+    date_range_slider = mo.ui.slider(
+        start=1,
+        stop=30,
+        value=7,
+        label="Date Range (days)",
+    )
+    
+    # Max records slider
+    max_records_slider = mo.ui.slider(
+        start=100,
+        stop=5000,
+        value=1000,
+        step=100,
+        label="Max Records per Stablecoin",
+    )
+    
+    mo.md("""
+    ### Pipeline Parameters
+    
+    Configure the parameters for the pipeline run:
+    """)
+    
+    mo.hstack([
+        pipeline_selector,
+        stablecoins_selector,
+    ])
+    
+    mo.hstack([
+        date_range_slider,
+        max_records_slider,
+    ])
+    
+    return (
+        pipeline_selector,
+        stablecoins_selector,
+        date_range_slider,
+        max_records_slider,
+    )
+
+
+@app.cell
+def pipeline_trigger_button(mo, zenml_available):
+    """Create Run Pipeline button.
+    
+    Requirements: 13.2
+    """
+    if not zenml_available:
+        return (None,)
+    
+    run_button = mo.ui.button(
+        label="🚀 Run Pipeline",
+        kind="success",
+    )
+    
+    return (run_button,)
+
+
+@app.cell
+def pipeline_trigger_cell(
+    mo,
+    zenml_bridge,
+    zenml_available,
+    run_button,
+    pipeline_selector,
+    stablecoins_selector,
+    date_range_slider,
+    max_records_slider,
+):
+    """Handle pipeline trigger and display progress.
+    
+    Requirements: 13.2, 13.3
+    """
+    if not zenml_available or zenml_bridge is None:
+        return (None, None)
+    
+    if run_button is None or not run_button.value:
+        return (None, None)
+    
+    # Get selected parameters
+    pipeline_name = pipeline_selector.value if pipeline_selector else "stablecoin_master_pipeline"
+    stablecoins = list(stablecoins_selector.value) if stablecoins_selector else ["USDC", "USDT"]
+    date_range_days = date_range_slider.value if date_range_slider else 7
+    max_records = max_records_slider.value if max_records_slider else 1000
+    
+    # Build parameters
+    parameters = {
+        "stablecoins": stablecoins,
+        "date_range_days": date_range_days,
+        "max_records": max_records,
+    }
+    
+    # Trigger pipeline
+    try:
+        run_id = zenml_bridge.trigger_pipeline(pipeline_name, parameters)
+        
+        mo.md(f"""
+        ### Pipeline Triggered ✅
+        
+        | Field | Value |
+        |-------|-------|
+        | **Pipeline** | {pipeline_name} |
+        | **Run ID** | `{run_id}` |
+        | **Stablecoins** | {', '.join(stablecoins)} |
+        | **Date Range** | {date_range_days} days |
+        | **Max Records** | {max_records:,} |
+        
+        The pipeline is now running. Check the status below.
+        """)
+        
+        return (run_id, None)
+        
+    except Exception as e:
+        error_msg = str(e)
+        mo.md(f"""
+        ### Pipeline Trigger Failed ❌
+        
+        Error: {error_msg}
+        """)
+        return (None, error_msg)
+
+
+@app.cell
+def pipeline_status_cell(mo, zenml_bridge, zenml_available, run_id):
+    """Display pipeline run status with progress indicators.
+    
+    Requirements: 13.3
+    """
+    if not zenml_available or zenml_bridge is None or run_id is None:
+        return
+    
+    # Get run status
+    status = zenml_bridge.get_run_status(run_id)
+    
+    if status is None:
+        mo.md(f"""
+        ### Run Status
+        
+        Unable to get status for run `{run_id}`
+        """)
+        return
+    
+    # Status icon
+    status_icons = {
+        "completed": "✅",
+        "running": "🔄",
+        "failed": "❌",
+        "initializing": "⏳",
+        "pending": "⏳",
+    }
+    status_icon = status_icons.get(status.status, "⚪")
+    
+    # Build step status table
+    step_rows = []
+    for step_name, step_status in status.steps.items():
+        step_icon = status_icons.get(step_status, "⚪")
+        step_rows.append(f"| {step_name} | {step_icon} {step_status} |")
+    
+    step_table = "\n".join(step_rows) if step_rows else "| No steps yet | ⏳ |"
+    
+    # Error message if failed
+    error_section = ""
+    if status.is_failed and status.error_message:
+        error_section = f"""
+        ### Error Details
+        
+        ```
+        {status.error_message}
+        ```
+        """
+    
+    mo.md(f"""
+    ### Run Status: {status_icon} {status.status.upper()}
+    
+    | Field | Value |
+    |-------|-------|
+    | **Run ID** | `{status.run_id}` |
+    | **Pipeline** | {status.pipeline_name} |
+    | **Started** | {status.start_time.strftime('%Y-%m-%d %H:%M:%S') if status.start_time else 'N/A'} |
+    | **Ended** | {status.end_time.strftime('%Y-%m-%d %H:%M:%S') if status.end_time else 'In progress'} |
+    
+    ### Step Progress
+    
+    | Step | Status |
+    |------|--------|
+    {step_table}
+    
+    {error_section}
+    """)
+    
+    return
+
+
+# =============================================================================
+# Conclusions and Summary
+# =============================================================================
+
+
 @app.cell
 def conclusions_analysis_cell(
     loaded_data,

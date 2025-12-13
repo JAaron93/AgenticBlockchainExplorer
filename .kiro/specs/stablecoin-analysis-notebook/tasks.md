@@ -235,21 +235,21 @@
     - **Property 19: Model metrics validity**
     - **Validates: Requirements 11.3, 15.2**
 
-- [ ] 14. Create master pipeline and Marimo-ZenML integration
-  - [ ] 14.1 Create master pipeline
+- [x] 14. Create master pipeline and Marimo-ZenML integration
+  - [x] 14.1 Create master pipeline
     - Create `pipelines/master_pipeline.py`
     - Chain collection, analysis, and ML inference
     - Support weekly cron scheduling configuration
     - _Requirements: 10.1, 10.5_
-  - [ ] 14.2 Create ZenML-Marimo bridge
+  - [x] 14.2 Create ZenML-Marimo bridge
     - Create `notebooks/zenml_bridge.py`
     - Implement `ZenMLNotebookBridge` class
     - Methods: list_pipelines, trigger_pipeline, get_run_status, load_latest_artifacts
     - _Requirements: 13.1, 13.2, 13.3, 13.4_
-  - [ ] 14.3 Write property test for pipeline trigger returns run_id
+  - [x] 14.3 Write property test for pipeline trigger returns run_id
     - **Property 20: Pipeline trigger returns run_id**
     - **Validates: Requirements 13.2**
-  - [ ] 14.4 Create pipeline control UI cells in marimo
+  - [x] 14.4 Create pipeline control UI cells in marimo
     - Display available pipelines and status
     - Add "Run Pipeline" button with parameter inputs
     - Show progress indicators during execution

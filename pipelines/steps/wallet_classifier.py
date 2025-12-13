@@ -565,6 +565,10 @@ def classify_wallets_step(
         # Calculate confidence (max probability)
         confidence = np.max(y_proba, axis=1)
         
+        # Verify address column exists
+        if "address" not in features_df.columns:
+            raise ValueError("Missing required column: 'address'")
+        
         # Build classifications DataFrame
         classifications_df = pd.DataFrame({
             "address": features_df["address"].values,

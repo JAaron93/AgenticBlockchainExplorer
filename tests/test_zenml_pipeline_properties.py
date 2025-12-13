@@ -1989,3 +1989,154 @@ class TestModelMetricsValidity:
         assert train + test == total, (
             f"train ({train}) + test ({test}) != total ({total})"
         )
+
+
+# =============================================================================
+# Property 20: Pipeline trigger returns run_id
+# =============================================================================
+
+class TestPipelineTriggerReturnsRunId:
+    """Tests for pipeline trigger returning run_id (Property 20)."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        pipeline_name=st.sampled_from([
+            "stablecoin_master_pipeline",
+            "stablecoin_collection_pipeline",
+            "stablecoin_analysis_pipeline",
+        ]),
+        stablecoins=st.lists(
+            st.sampled_from(["USDC", "USDT"]),
+            min_size=1,
+            max_size=2,
+            unique=True,
+        ),
+        date_range_days=st.integers(min_value=1, max_value=30),
+    )
+    def test_property_20_trigger_pipeline_returns_valid_run_id(
+        self, pipeline_name, stablecoins, date_range_days
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 20: Pipeline trigger returns run_id**
+
+        For any pipeline trigger request with valid parameters, the system SHALL
+        return a non-empty string run_id that uniquely identifies the triggered run.
+
+        **Validates: Requirements 13.2**
+        """
+        from notebooks.zenml_bridge import ZenMLNotebookBridge
+        
+        # Create bridge in mock mode for testing
+        # (Real ZenML integration tested separately with proper ZenML setup)
+        bridge = ZenMLNotebookBridge(force_mock=True)
+        
+        # Build parameters
+        parameters = {
+            "stablecoins": stablecoins,
+            "date_range_days": date_range_days,
+        }
+        
+        # Trigger pipeline
+        run_id = bridge.trigger_pipeline(pipeline_name, parameters)
+        
+        # Verify run_id is returned
+        assert run_id is not None, (
+            f"trigger_pipeline should return a run_id, got None"
+        )
+        
+        # Verify run_id is a non-empty string
+        assert isinstance(run_id, str), (
+            f"run_id should be a string, got {type(run_id)}"
+        )
+        
+        assert len(run_id) > 0, (
+            f"run_id should be non-empty"
+        )
+        
+        # Verify run_id can be used to get status
+        status = bridge.get_run_status(run_id)
+        assert status is not None, (
+            f"get_run_status should return status for run_id '{run_id}'"
+        )
+        
+        # Verify status has the correct run_id
+        assert status.run_id == run_id, (
+            f"Status run_id ({status.run_id}) should match triggered run_id ({run_id})"
+        )
+
+    @settings(max_examples=50, deadline=None)
+    @given(
+        pipeline_name=st.sampled_from([
+            "stablecoin_master_pipeline",
+            "stablecoin_collection_pipeline",
+            "stablecoin_analysis_pipeline",
+        ]),
+    )
+    def test_property_20_multiple_triggers_return_unique_run_ids(
+        self, pipeline_name
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 20: Pipeline trigger returns run_id**
+
+        For multiple pipeline trigger requests, each trigger SHALL return a
+        unique run_id that is different from all previous run_ids.
+
+        **Validates: Requirements 13.2**
+        """
+        from notebooks.zenml_bridge import ZenMLNotebookBridge
+        
+        # Create bridge in mock mode for testing
+        bridge = ZenMLNotebookBridge(force_mock=True)
+        
+        # Trigger pipeline multiple times
+        run_ids = []
+        for i in range(3):
+            run_id = bridge.trigger_pipeline(
+                pipeline_name,
+                {"stablecoins": ["USDC"], "date_range_days": 7}
+            )
+            run_ids.append(run_id)
+        
+        # Verify all run_ids are unique
+        assert len(run_ids) == len(set(run_ids)), (
+            f"All run_ids should be unique, got duplicates: {run_ids}"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        pipeline_name=st.sampled_from([
+            "stablecoin_master_pipeline",
+            "stablecoin_collection_pipeline",
+            "stablecoin_analysis_pipeline",
+        ]),
+    )
+    def test_property_20_run_status_reflects_pipeline_name(
+        self, pipeline_name
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 20: Pipeline trigger returns run_id**
+
+        For any triggered pipeline, the run status SHALL correctly reflect
+        the pipeline name that was triggered.
+
+        **Validates: Requirements 13.2**
+        """
+        from notebooks.zenml_bridge import ZenMLNotebookBridge
+        
+        # Create bridge in mock mode for testing
+        bridge = ZenMLNotebookBridge(force_mock=True)
+        
+        # Trigger pipeline
+        run_id = bridge.trigger_pipeline(
+            pipeline_name,
+            {"stablecoins": ["USDC", "USDT"], "date_range_days": 7}
+        )
+        
+        # Get status
+        status = bridge.get_run_status(run_id)
+        
+        # Verify pipeline name in status
+        assert status.pipeline_name == pipeline_name, (
+            f"Status pipeline_name ({status.pipeline_name}) should match "
+            f"triggered pipeline ({pipeline_name})"
+        )
