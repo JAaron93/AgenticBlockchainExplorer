@@ -67,11 +67,28 @@ def title(mo):
         - Time series analysis of transaction patterns
         - Cross-chain comparison (Ethereum, BSC, Polygon)
         - Generate summary conclusions with confidence indicators
+        - **ZenML Integration**: Trigger and monitor data collection pipelines
+        - **ML Predictions**: View SoV predictions and wallet behavior classifications
 
         ## Getting Started
 
         1. Select a JSON export file from the output directory below
         2. Or generate sample data to explore the analysis capabilities
+        3. Or use ZenML pipeline controls to trigger data collection
+
+        ## Data Flow
+
+        ```
+        Data Source → Analysis → Visualization → Conclusions
+        ↓
+        JSON File / Sample Data / ZenML Pipeline
+        ↓
+        Activity Analysis → Stablecoin Comparison → Holder Analysis
+        ↓
+        Time Series → Chain Comparison → ML Predictions
+        ↓
+        Summary & Conclusions with Confidence Indicators
+        ```
         """
     )
     return
@@ -125,6 +142,37 @@ def utility_functions(Decimal):
             return f"${float(amount):.2f}"
 
     return (format_currency,)
+
+
+@app.cell
+def loading_state_utils(mo):
+    """Utility functions for displaying loading states.
+    
+    Provides consistent loading indicators for long-running computations.
+    Requirements: 1.1, 13.3
+    """
+    
+    def show_loading(message: str = "Loading..."):
+        """Display a loading spinner with message."""
+        return mo.md(f"⏳ **{message}**")
+    
+    def show_success(message: str = "Complete"):
+        """Display a success message."""
+        return mo.md(f"✅ **{message}**")
+    
+    def show_error(message: str = "Error"):
+        """Display an error message."""
+        return mo.md(f"❌ **{message}**")
+    
+    def show_warning(message: str = "Warning"):
+        """Display a warning message."""
+        return mo.md(f"⚠️ **{message}**")
+    
+    def show_info(message: str = "Info"):
+        """Display an info message."""
+        return mo.md(f"ℹ️ **{message}**")
+    
+    return show_loading, show_success, show_error, show_warning, show_info
 
 
 @app.cell
@@ -286,13 +334,17 @@ def display_metadata(mo, loaded_data, load_error):
 
 
 @app.cell
-def activity_analysis_cell(loaded_data, analyze_activity_types):
-    """Analyze activity type distribution."""
+def activity_analysis_cell(analysis_data, analyze_activity_types):
+    """Analyze activity type distribution.
+    
+    This cell depends on analysis_data from merge_data_sources.
+    Requirements: 2.1, 2.3
+    """
     activity_breakdown = None
 
-    if loaded_data is not None:
+    if analysis_data is not None:
         activity_breakdown = analyze_activity_types(
-            loaded_data.transactions_df
+            analysis_data.transactions_df
         )
 
     return (activity_breakdown,)
@@ -300,10 +352,13 @@ def activity_analysis_cell(loaded_data, analyze_activity_types):
 
 @app.cell
 def activity_breakdown_display(
-    mo, loaded_data, activity_breakdown, Decimal, format_currency
+    mo, analysis_data, activity_breakdown, Decimal, format_currency
 ):
-    """Display activity type breakdown with visualizations."""
-    if loaded_data is None or activity_breakdown is None:
+    """Display activity type breakdown with visualizations.
+    
+    Requirements: 2.1, 2.3, 2.4
+    """
+    if analysis_data is None or activity_breakdown is None:
         return
 
     # Build counts table
@@ -350,9 +405,12 @@ def activity_breakdown_display(
 
 
 @app.cell
-def activity_pie_chart(mo, alt, pd, loaded_data, activity_breakdown):
-    """Create pie chart for activity type distribution."""
-    if loaded_data is None or activity_breakdown is None:
+def activity_pie_chart(mo, alt, pd, analysis_data, activity_breakdown):
+    """Create pie chart for activity type distribution.
+    
+    Requirements: 2.2
+    """
+    if analysis_data is None or activity_breakdown is None:
         return
 
     # Prepare data for pie chart
@@ -397,9 +455,9 @@ def activity_pie_chart(mo, alt, pd, loaded_data, activity_breakdown):
 
 
 @app.cell
-def display_pie_chart(mo, loaded_data, activity_breakdown, pie_chart):
+def display_pie_chart(mo, analysis_data, activity_breakdown, pie_chart):
     """Display the pie chart."""
-    if loaded_data is None or activity_breakdown is None or pie_chart is None:
+    if analysis_data is None or activity_breakdown is None or pie_chart is None:
         return
 
     try:
@@ -411,10 +469,13 @@ def display_pie_chart(mo, loaded_data, activity_breakdown, pie_chart):
 
 @app.cell
 def activity_volume_bar_chart(
-    mo, alt, pd, loaded_data, activity_breakdown, Decimal
+    mo, alt, pd, analysis_data, activity_breakdown, Decimal
 ):
-    """Create bar chart for volume by activity type."""
-    if loaded_data is None or activity_breakdown is None:
+    """Create bar chart for volume by activity type.
+    
+    Requirements: 2.4
+    """
+    if analysis_data is None or activity_breakdown is None:
         return
 
     # Prepare data for bar chart
@@ -461,9 +522,9 @@ def activity_volume_bar_chart(
 
 
 @app.cell
-def display_bar_chart(mo, loaded_data, activity_breakdown, bar_chart):
+def display_bar_chart(mo, analysis_data, activity_breakdown, bar_chart):
     """Display the bar chart."""
-    if loaded_data is None or activity_breakdown is None or bar_chart is None:
+    if analysis_data is None or activity_breakdown is None or bar_chart is None:
         return
 
     try:
@@ -479,14 +540,44 @@ def display_bar_chart(mo, loaded_data, activity_breakdown, bar_chart):
 
 
 @app.cell
-def stablecoin_analysis_cell(loaded_data, analyze_by_stablecoin):
-    """Analyze transactions grouped by stablecoin type."""
+def stablecoin_comparison_docs(mo):
+    """Documentation for stablecoin comparison analysis.
+    
+    Requirements: 8.3
+    """
+    mo.md("""
+    ---
+    
+    ## Understanding Stablecoin Comparison
+    
+    This section compares usage patterns between **USDC** and **USDT**:
+    
+    - **Transaction Count**: Total number of transactions per stablecoin
+    - **Total Volume**: Sum of all transaction amounts
+    - **Average Transaction Size**: Mean transaction amount
+    - **SoV Ratio**: Percentage of holders classified as store-of-value
+    
+    ### Interpreting the Results
+    
+    - Higher SoV ratio indicates more users holding the stablecoin long-term
+    - Larger average transaction sizes may indicate institutional usage
+    - Activity distribution shows the breakdown of transaction types
+    """)
+    return
+
+
+@app.cell
+def stablecoin_analysis_cell(analysis_data, analyze_by_stablecoin):
+    """Analyze transactions grouped by stablecoin type.
+    
+    Requirements: 3.1, 3.3, 3.4
+    """
     stablecoin_comparison = None
 
-    if loaded_data is not None:
+    if analysis_data is not None:
         stablecoin_comparison = analyze_by_stablecoin(
-            loaded_data.transactions_df,
-            loaded_data.holders_df,
+            analysis_data.transactions_df,
+            analysis_data.holders_df,
         )
 
     return (stablecoin_comparison,)
@@ -494,10 +585,13 @@ def stablecoin_analysis_cell(loaded_data, analyze_by_stablecoin):
 
 @app.cell
 def stablecoin_comparison_display(
-    mo, loaded_data, stablecoin_comparison, format_currency
+    mo, analysis_data, stablecoin_comparison, format_currency
 ):
-    """Display stablecoin comparison metrics."""
-    if loaded_data is None or stablecoin_comparison is None:
+    """Display stablecoin comparison metrics.
+    
+    Requirements: 3.1, 3.2, 3.3, 3.4
+    """
+    if analysis_data is None or stablecoin_comparison is None:
         return
 
     # Build comparison table
@@ -548,10 +642,13 @@ def stablecoin_comparison_display(
 
 @app.cell
 def stablecoin_grouped_bar_chart(
-    mo, alt, pd, loaded_data, stablecoin_comparison, Decimal
+    mo, alt, pd, analysis_data, stablecoin_comparison, Decimal
 ):
-    """Create grouped bar chart comparing USDC vs USDT activity distribution."""
-    if loaded_data is None or stablecoin_comparison is None:
+    """Create grouped bar chart comparing USDC vs USDT activity distribution.
+    
+    Requirements: 3.2
+    """
+    if analysis_data is None or stablecoin_comparison is None:
         return
 
     # Prepare data for grouped bar chart
@@ -606,9 +703,9 @@ def stablecoin_grouped_bar_chart(
 
 
 @app.cell
-def display_grouped_chart(mo, loaded_data, stablecoin_comparison, grouped_chart):
+def display_grouped_chart(mo, analysis_data, stablecoin_comparison, grouped_chart):
     """Display the grouped bar chart."""
-    if loaded_data is None or stablecoin_comparison is None:
+    if analysis_data is None or stablecoin_comparison is None:
         return
     if grouped_chart is None:
         return
@@ -621,10 +718,13 @@ def display_grouped_chart(mo, loaded_data, stablecoin_comparison, grouped_chart)
 
 @app.cell
 def avg_tx_size_comparison_chart(
-    mo, alt, pd, loaded_data, stablecoin_comparison, Decimal
+    mo, alt, pd, analysis_data, stablecoin_comparison, Decimal
 ):
-    """Create bar chart comparing average transaction size by stablecoin."""
-    if loaded_data is None or stablecoin_comparison is None:
+    """Create bar chart comparing average transaction size by stablecoin.
+    
+    Requirements: 3.3
+    """
+    if analysis_data is None or stablecoin_comparison is None:
         return
 
     # Prepare data for average transaction size comparison
@@ -669,9 +769,9 @@ def avg_tx_size_comparison_chart(
 
 
 @app.cell
-def display_avg_chart(mo, loaded_data, stablecoin_comparison, avg_chart):
+def display_avg_chart(mo, analysis_data, stablecoin_comparison, avg_chart):
     """Display the average transaction size chart."""
-    if loaded_data is None or stablecoin_comparison is None:
+    if analysis_data is None or stablecoin_comparison is None:
         return
     if avg_chart is None:
         return
@@ -688,27 +788,68 @@ def display_avg_chart(mo, loaded_data, stablecoin_comparison, avg_chart):
 
 
 @app.cell
-def holder_analysis_cell(loaded_data, analyze_holders, get_top_holders):
-    """Analyze holder behavior patterns."""
+def holder_analysis_docs(mo):
+    """Documentation for holder behavior analysis.
+    
+    Requirements: 8.3
+    """
+    mo.md("""
+    ---
+    
+    ## Understanding Holder Behavior
+    
+    This section analyzes how holders use their stablecoins:
+    
+    ### Classification Criteria
+    
+    - **Store of Value (SoV)**: Holders who keep tokens for >30 days without outgoing transfers
+    - **Active Transactors**: Holders who regularly send/receive tokens
+    
+    ### Key Metrics
+    
+    - **SoV Percentage**: What portion of holders are long-term holders
+    - **Average Balance**: Typical balance for each holder type
+    - **Holding Period**: How long SoV holders keep their tokens
+    
+    ### Top Holders
+    
+    The top 10 holders by balance are displayed with:
+    - Masked addresses (for privacy)
+    - Balance amount
+    - Stablecoin type and chain
+    - SoV classification
+    """)
+    return
+
+
+@app.cell
+def holder_analysis_cell(analysis_data, analyze_holders, get_top_holders):
+    """Analyze holder behavior patterns.
+    
+    Requirements: 4.1, 4.3, 4.4
+    """
     holder_metrics = None
     top_holders = None
 
-    if loaded_data is not None and not loaded_data.holders_df.empty:
+    if analysis_data is not None and not analysis_data.holders_df.empty:
         holder_metrics = analyze_holders(
-            loaded_data.holders_df,
-            loaded_data.transactions_df,
+            analysis_data.holders_df,
+            analysis_data.transactions_df,
         )
-        top_holders = get_top_holders(loaded_data.holders_df, n=10)
+        top_holders = get_top_holders(analysis_data.holders_df, n=10)
 
     return holder_metrics, top_holders
 
 
 @app.cell
 def holder_metrics_display(
-    mo, loaded_data, holder_metrics, format_currency
+    mo, analysis_data, holder_metrics, format_currency
 ):
-    """Display holder behavior metrics."""
-    if loaded_data is None or holder_metrics is None:
+    """Display holder behavior metrics.
+    
+    Requirements: 4.1, 4.2, 4.3
+    """
+    if analysis_data is None or holder_metrics is None:
         return
 
     mo.md(f"""
@@ -741,13 +882,16 @@ def holder_metrics_display(
 
 
 @app.cell
-def holder_balance_histogram(mo, alt, pd, loaded_data, Decimal):
-    """Create histogram of holder balances segmented by SoV status."""
-    if loaded_data is None or loaded_data.holders_df.empty:
+def holder_balance_histogram(mo, alt, pd, analysis_data, Decimal):
+    """Create histogram of holder balances segmented by SoV status.
+    
+    Requirements: 4.2
+    """
+    if analysis_data is None or analysis_data.holders_df.empty:
         return (None,)
 
     # Prepare data for histogram
-    df = loaded_data.holders_df.copy()
+    df = analysis_data.holders_df.copy()
 
     # Convert balance to float for visualization
     df["balance_float"] = df["balance"].apply(
@@ -797,9 +941,9 @@ def holder_balance_histogram(mo, alt, pd, loaded_data, Decimal):
 
 
 @app.cell
-def display_holder_histogram(mo, loaded_data, histogram):
+def display_holder_histogram(mo, analysis_data, histogram):
     """Display the holder balance histogram."""
-    if loaded_data is None or histogram is None:
+    if analysis_data is None or histogram is None:
         return
 
     try:
@@ -809,9 +953,12 @@ def display_holder_histogram(mo, loaded_data, histogram):
 
 
 @app.cell
-def top_holders_table(mo, loaded_data, top_holders, format_currency):
-    """Display top 10 holders table with classifications."""
-    if loaded_data is None or not top_holders:
+def top_holders_table(mo, analysis_data, top_holders, format_currency):
+    """Display top 10 holders table with classifications.
+    
+    Requirements: 4.4
+    """
+    if analysis_data is None or not top_holders:
         return
 
     # Build table rows
@@ -844,9 +991,12 @@ def top_holders_table(mo, loaded_data, top_holders, format_currency):
 
 
 @app.cell
-def holder_sov_pie_chart(mo, alt, pd, loaded_data, holder_metrics):
-    """Create pie chart for holder SoV classification distribution."""
-    if loaded_data is None or holder_metrics is None:
+def holder_sov_pie_chart(mo, alt, pd, analysis_data, holder_metrics):
+    """Create pie chart for holder SoV classification distribution.
+    
+    Requirements: 4.1, 4.2
+    """
+    if analysis_data is None or holder_metrics is None:
         return (None,)
 
     if holder_metrics.total_holders == 0:
@@ -900,9 +1050,9 @@ def holder_sov_pie_chart(mo, alt, pd, loaded_data, holder_metrics):
 
 
 @app.cell
-def display_sov_pie(mo, loaded_data, holder_metrics, sov_pie):
+def display_sov_pie(mo, analysis_data, holder_metrics, sov_pie):
     """Display the holder SoV pie chart."""
-    if loaded_data is None or holder_metrics is None or sov_pie is None:
+    if analysis_data is None or holder_metrics is None or sov_pie is None:
         return
 
     try:
@@ -914,6 +1064,39 @@ def display_sov_pie(mo, loaded_data, holder_metrics, sov_pie):
 # =============================================================================
 # Time Series Analysis (Task 6)
 # =============================================================================
+
+
+@app.cell
+def time_series_docs(mo):
+    """Documentation for time series analysis.
+    
+    Requirements: 8.3
+    """
+    mo.md("""
+    ---
+    
+    ## Understanding Time Series Analysis
+    
+    This section shows how stablecoin usage changes over time:
+    
+    ### Aggregation Periods
+    
+    - **Daily**: Day-by-day transaction patterns
+    - **Weekly**: Week-over-week trends
+    - **Monthly**: Long-term monthly patterns
+    
+    ### Charts
+    
+    1. **Transaction Count Over Time**: Shows activity levels by type
+    2. **Volume Over Time**: Shows total value transferred by stablecoin
+    
+    ### Interpreting Trends
+    
+    - Spikes may indicate market events or large transfers
+    - Consistent patterns suggest regular usage
+    - Declining trends may indicate reduced adoption
+    """)
+    return
 
 
 @app.cell
@@ -968,22 +1151,25 @@ def time_series_ui(mo, AGGREGATION_PERIODS):
 
 @app.cell
 def time_series_analysis_cell(
-    loaded_data,
+    analysis_data,
     aggregation_selector,
     aggregate_time_series_by_activity,
     aggregate_time_series_by_stablecoin,
 ):
-    """Perform time series analysis based on selected aggregation."""
+    """Perform time series analysis based on selected aggregation.
+    
+    Requirements: 5.1, 5.4
+    """
     ts_by_activity = None
     ts_by_stablecoin = None
 
-    if loaded_data is not None and not loaded_data.transactions_df.empty:
+    if analysis_data is not None and not analysis_data.transactions_df.empty:
         aggregation = aggregation_selector.value
         ts_by_activity = aggregate_time_series_by_activity(
-            loaded_data.transactions_df, aggregation
+            analysis_data.transactions_df, aggregation
         )
         ts_by_stablecoin = aggregate_time_series_by_stablecoin(
-            loaded_data.transactions_df, aggregation
+            analysis_data.transactions_df, aggregation
         )
 
     return ts_by_activity, ts_by_stablecoin
@@ -991,10 +1177,13 @@ def time_series_analysis_cell(
 
 @app.cell
 def time_series_count_chart(
-    mo, alt, pd, loaded_data, ts_by_activity, aggregation_selector
+    mo, alt, pd, analysis_data, ts_by_activity, aggregation_selector
 ):
-    """Create line chart for transaction count over time by activity type."""
-    if loaded_data is None or ts_by_activity is None or ts_by_activity.empty:
+    """Create line chart for transaction count over time by activity type.
+    
+    Requirements: 5.2
+    """
+    if analysis_data is None or ts_by_activity is None or ts_by_activity.empty:
         return (None,)
 
     # Prepare data for chart - convert period to string for Altair
@@ -1033,9 +1222,9 @@ def time_series_count_chart(
 
 
 @app.cell
-def display_count_chart(mo, loaded_data, ts_by_activity, count_chart):
+def display_count_chart(mo, analysis_data, ts_by_activity, count_chart):
     """Display the transaction count line chart."""
-    if loaded_data is None or ts_by_activity is None or count_chart is None:
+    if analysis_data is None or ts_by_activity is None or count_chart is None:
         return
 
     try:
@@ -1046,10 +1235,13 @@ def display_count_chart(mo, loaded_data, ts_by_activity, count_chart):
 
 @app.cell
 def time_series_volume_chart(
-    mo, alt, pd, loaded_data, ts_by_stablecoin, aggregation_selector, Decimal
+    mo, alt, pd, analysis_data, ts_by_stablecoin, aggregation_selector, Decimal
 ):
-    """Create line chart for transaction volume over time by stablecoin."""
-    if (loaded_data is None or ts_by_stablecoin is None or
+    """Create line chart for transaction volume over time by stablecoin.
+    
+    Requirements: 5.3
+    """
+    if (analysis_data is None or ts_by_stablecoin is None or
             ts_by_stablecoin.empty):
         return (None,)
 
@@ -1093,9 +1285,9 @@ def time_series_volume_chart(
 
 
 @app.cell
-def display_volume_chart(mo, loaded_data, ts_by_stablecoin, volume_chart):
+def display_volume_chart(mo, analysis_data, ts_by_stablecoin, volume_chart):
     """Display the transaction volume line chart."""
-    if loaded_data is None or ts_by_stablecoin is None or volume_chart is None:
+    if analysis_data is None or ts_by_stablecoin is None or volume_chart is None:
         return
 
     try:
@@ -1106,10 +1298,13 @@ def display_volume_chart(mo, loaded_data, ts_by_stablecoin, volume_chart):
 
 @app.cell
 def time_series_summary(
-    mo, loaded_data, ts_by_activity, ts_by_stablecoin, format_currency, Decimal
+    mo, analysis_data, ts_by_activity, ts_by_stablecoin, format_currency, Decimal
 ):
-    """Display time series summary statistics."""
-    if loaded_data is None or ts_by_activity is None:
+    """Display time series summary statistics.
+    
+    Requirements: 5.1, 5.4
+    """
+    if analysis_data is None or ts_by_activity is None:
         return
 
     if ts_by_activity.empty:
@@ -1157,6 +1352,42 @@ def time_series_summary(
 
 
 @app.cell
+def chain_analysis_docs(mo):
+    """Documentation for chain comparison analysis.
+    
+    Requirements: 8.3
+    """
+    mo.md("""
+    ---
+    
+    ## Understanding Chain Comparison
+    
+    This section compares stablecoin usage across blockchain networks:
+    
+    ### Supported Chains
+    
+    - **Ethereum**: The original and largest DeFi ecosystem
+    - **BSC (BNB Chain)**: Lower fees, popular for retail users
+    - **Polygon**: Ethereum L2 with very low fees
+    
+    ### Key Metrics Per Chain
+    
+    - **Transaction Count**: Activity level on each chain
+    - **Total Volume**: Value transferred on each chain
+    - **Average Transaction Size**: Typical transaction amount
+    - **Average Gas Cost**: Transaction fees in native tokens
+    - **SoV Ratio**: Store-of-value behavior per chain
+    
+    ### Interpreting Results
+    
+    - Higher gas costs on Ethereum may push smaller transactions to L2s
+    - Different SoV ratios may indicate different user demographics
+    - Volume concentration shows where most value flows
+    """)
+    return
+
+
+@app.cell
 def chain_analysis_imports():
     """Import chain analysis functions."""
     import sys
@@ -1183,23 +1414,29 @@ def chain_analysis_imports():
 
 
 @app.cell
-def chain_analysis_cell(loaded_data, analyze_by_chain):
-    """Analyze transactions grouped by blockchain chain."""
+def chain_analysis_cell(analysis_data, analyze_by_chain):
+    """Analyze transactions grouped by blockchain chain.
+    
+    Requirements: 6.1, 6.3, 6.4
+    """
     chain_metrics = None
 
-    if loaded_data is not None and not loaded_data.transactions_df.empty:
+    if analysis_data is not None and not analysis_data.transactions_df.empty:
         chain_metrics = analyze_by_chain(
-            loaded_data.transactions_df,
-            loaded_data.holders_df,
+            analysis_data.transactions_df,
+            analysis_data.holders_df,
         )
 
     return (chain_metrics,)
 
 
 @app.cell
-def chain_metrics_display(mo, loaded_data, chain_metrics, format_currency):
-    """Display chain comparison metrics table."""
-    if loaded_data is None or chain_metrics is None:
+def chain_metrics_display(mo, analysis_data, chain_metrics, format_currency):
+    """Display chain comparison metrics table.
+    
+    Requirements: 6.1, 6.2, 6.3, 6.4
+    """
+    if analysis_data is None or chain_metrics is None:
         return
 
     # Build comparison table
@@ -1265,14 +1502,17 @@ def chain_metrics_display(mo, loaded_data, chain_metrics, format_currency):
 
 @app.cell
 def chain_stacked_bar_chart(
-    mo, alt, pd, loaded_data, get_chain_activity_distribution
+    mo, alt, pd, analysis_data, get_chain_activity_distribution
 ):
-    """Create stacked bar chart for activity distribution per chain."""
-    if loaded_data is None or loaded_data.transactions_df.empty:
+    """Create stacked bar chart for activity distribution per chain.
+    
+    Requirements: 6.2
+    """
+    if analysis_data is None or analysis_data.transactions_df.empty:
         return (None,)
 
     # Get activity distribution data
-    chart_df = get_chain_activity_distribution(loaded_data.transactions_df)
+    chart_df = get_chain_activity_distribution(analysis_data.transactions_df)
 
     if chart_df.empty or chart_df['count'].sum() == 0:
         return (None,)
@@ -1321,10 +1561,10 @@ def chain_stacked_bar_chart(
 
 @app.cell
 def display_stacked_chart(
-    mo, loaded_data, get_chain_activity_distribution, stacked_chart
+    mo, analysis_data, get_chain_activity_distribution, stacked_chart
 ):
     """Display the stacked bar chart."""
-    if loaded_data is None or stacked_chart is None:
+    if analysis_data is None or stacked_chart is None:
         return
 
     try:
@@ -1334,9 +1574,9 @@ def display_stacked_chart(
 
 
 @app.cell
-def chain_volume_bar_chart(mo, alt, pd, loaded_data, chain_metrics, Decimal):
+def chain_volume_bar_chart(mo, alt, pd, analysis_data, chain_metrics, Decimal):
     """Create bar chart comparing transaction volume by chain."""
-    if loaded_data is None or chain_metrics is None:
+    if analysis_data is None or chain_metrics is None:
         return (None,)
 
     # Prepare data for bar chart
@@ -1386,9 +1626,9 @@ def chain_volume_bar_chart(mo, alt, pd, loaded_data, chain_metrics, Decimal):
 
 
 @app.cell
-def display_volume_bar(mo, loaded_data, chain_metrics, volume_bar):
+def display_volume_bar(mo, analysis_data, chain_metrics, volume_bar):
     """Display the volume bar chart."""
-    if loaded_data is None or chain_metrics is None or volume_bar is None:
+    if analysis_data is None or chain_metrics is None or volume_bar is None:
         return
 
     try:
@@ -1398,9 +1638,12 @@ def display_volume_bar(mo, loaded_data, chain_metrics, volume_bar):
 
 
 @app.cell
-def chain_avg_tx_size_chart(mo, alt, pd, loaded_data, chain_metrics, Decimal):
-    """Create bar chart comparing average transaction size by chain."""
-    if loaded_data is None or chain_metrics is None:
+def chain_avg_tx_size_chart(mo, alt, pd, analysis_data, chain_metrics, Decimal):
+    """Create bar chart comparing average transaction size by chain.
+    
+    Requirements: 6.3
+    """
+    if analysis_data is None or chain_metrics is None:
         return (None,)
 
     # Prepare data for bar chart
@@ -1448,9 +1691,9 @@ def chain_avg_tx_size_chart(mo, alt, pd, loaded_data, chain_metrics, Decimal):
 
 
 @app.cell
-def display_avg_tx_chart(mo, loaded_data, chain_metrics, avg_tx_chart):
+def display_avg_tx_chart(mo, analysis_data, chain_metrics, avg_tx_chart):
     """Display the average transaction size chart."""
-    if loaded_data is None or chain_metrics is None or avg_tx_chart is None:
+    if analysis_data is None or chain_metrics is None or avg_tx_chart is None:
         return
 
     try:
@@ -1460,9 +1703,12 @@ def display_avg_tx_chart(mo, loaded_data, chain_metrics, avg_tx_chart):
 
 
 @app.cell
-def chain_gas_cost_chart(mo, alt, pd, loaded_data, chain_metrics):
-    """Create bar chart comparing average gas cost by chain."""
-    if loaded_data is None or chain_metrics is None:
+def chain_gas_cost_chart(mo, alt, pd, analysis_data, chain_metrics):
+    """Create bar chart comparing average gas cost by chain.
+    
+    Requirements: 6.3
+    """
+    if analysis_data is None or chain_metrics is None:
         return (None,)
 
     # Prepare data for bar chart - only include chains with gas data
@@ -1521,9 +1767,9 @@ def chain_gas_cost_chart(mo, alt, pd, loaded_data, chain_metrics):
 
 
 @app.cell
-def display_gas_chart(mo, loaded_data, chain_metrics, gas_chart):
+def display_gas_chart(mo, analysis_data, chain_metrics, gas_chart):
     """Display the gas cost chart."""
-    if loaded_data is None or chain_metrics is None or gas_chart is None:
+    if analysis_data is None or chain_metrics is None or gas_chart is None:
         return
 
     try:
@@ -1533,9 +1779,12 @@ def display_gas_chart(mo, loaded_data, chain_metrics, gas_chart):
 
 
 @app.cell
-def chain_sov_ratio_chart(mo, alt, pd, loaded_data, chain_metrics):
-    """Create bar chart comparing SoV ratio by chain."""
-    if loaded_data is None or chain_metrics is None:
+def chain_sov_ratio_chart(mo, alt, pd, analysis_data, chain_metrics):
+    """Create bar chart comparing SoV ratio by chain.
+    
+    Requirements: 6.4
+    """
+    if analysis_data is None or chain_metrics is None:
         return (None,)
 
     # Prepare data for bar chart
@@ -1586,9 +1835,9 @@ def chain_sov_ratio_chart(mo, alt, pd, loaded_data, chain_metrics):
 
 
 @app.cell
-def display_sov_chart(mo, loaded_data, chain_metrics, sov_chart):
+def display_sov_chart(mo, analysis_data, chain_metrics, sov_chart):
     """Display the SoV ratio chart."""
-    if loaded_data is None or chain_metrics is None or sov_chart is None:
+    if analysis_data is None or chain_metrics is None or sov_chart is None:
         return
 
     try:
@@ -1733,19 +1982,76 @@ def generate_sample_cell(
 def merge_data_sources(loaded_data, sample_data):
     """Merge loaded data and sample data into a single source.
     
-    Returns the merged data as 'loaded_data' so downstream analysis cells
-    continue to work without modification.
+    Returns the merged data as 'analysis_data' so downstream analysis cells
+    have a unified data source. This cell acts as the central data hub
+    for all analysis cells.
+    
+    Priority:
+    1. Sample data (if use_sample_data is checked)
+    2. Loaded data from JSON file
+    3. None (no data available)
     """
     # Use sample data if available, otherwise use loaded data
-    # Return as loaded_data to maintain compatibility with downstream cells
-    if sample_data is not None:
-        loaded_data = sample_data
-    return (loaded_data,)
+    analysis_data = sample_data if sample_data is not None else loaded_data
+    return (analysis_data,)
 
 
 # =============================================================================
 # ZenML Pipeline Control UI
 # =============================================================================
+
+
+@app.cell
+def zenml_pipeline_docs(mo):
+    """Documentation for ZenML pipeline integration.
+    
+    Requirements: 8.3, 14.5
+    """
+    mo.md("""
+    ---
+    
+    ## ZenML Pipeline Integration
+    
+    This notebook integrates with ZenML for automated data collection and ML pipelines.
+    
+    ### Available Pipelines
+    
+    1. **Master Pipeline** (`stablecoin_master_pipeline`)
+       - Collects data from all blockchain explorers
+       - Runs all analysis steps
+       - Executes ML inference for predictions
+       - Recommended for weekly scheduled runs
+    
+    2. **Collection Pipeline** (`stablecoin_collection_pipeline`)
+       - Only collects data from blockchain explorers
+       - Use when you only need fresh data
+    
+    3. **Analysis Pipeline** (`stablecoin_analysis_pipeline`)
+       - Runs analysis on existing data
+       - Use when data is already collected
+    
+    ### Pipeline Parameters
+    
+    - **Stablecoins**: Which tokens to collect (USDC, USDT)
+    - **Date Range**: How many days of data to collect
+    - **Max Records**: Limit on records per stablecoin
+    
+    ### Triggering Pipelines
+    
+    1. Select a pipeline from the dropdown
+    2. Configure parameters
+    3. Click "Run Pipeline"
+    4. Monitor progress in the status section
+    
+    ### Scheduling
+    
+    For production deployment, configure weekly cron jobs:
+    ```bash
+    # Run master pipeline every Sunday at 2 AM
+    0 2 * * 0 zenml pipeline run stablecoin_master_pipeline
+    ```
+    """)
+    return
 
 
 @app.cell
@@ -2238,6 +2544,60 @@ def display_artifact_refresh_controls(
 
 
 @app.cell
+def ml_predictions_docs(mo):
+    """Documentation for ML predictions interpretation.
+    
+    Requirements: 8.3, 14.5
+    """
+    mo.md("""
+    ---
+    
+    ## Understanding ML Predictions
+    
+    The system uses machine learning models to predict holder behavior.
+    
+    ### Store of Value (SoV) Prediction
+    
+    **What it predicts**: Whether a holder will become a long-term holder (SoV)
+    
+    **How to interpret**:
+    - **Probability ≥ 0.5**: Likely to become SoV holder
+    - **Probability < 0.5**: Likely to remain active transactor
+    - Higher probability = higher confidence in SoV prediction
+    
+    **Features used**:
+    - Transaction frequency and patterns
+    - Balance size and volatility
+    - Holding period trends
+    - Cross-chain activity
+    
+    ### Wallet Behavior Classification
+    
+    **Classes**:
+    - **Trader**: High frequency (>1 tx/day), short holding (<7 days)
+    - **Holder**: Low frequency (<0.1 tx/day), long holding (>30 days)
+    - **Whale**: Top 1% by balance (any activity pattern)
+    - **Retail**: Everyone else (moderate activity, smaller balances)
+    
+    **Confidence scores**:
+    - **High (≥0.8)**: Strong classification signal
+    - **Medium (0.6-0.8)**: Moderate confidence
+    - **Low (<0.6)**: Uncertain classification, may need review
+    
+    ### Model Performance
+    
+    Models are evaluated using:
+    - **Precision**: How many predictions are correct
+    - **Recall**: How many actual cases are found
+    - **F1 Score**: Balance of precision and recall
+    - **AUC-ROC**: Overall discrimination ability
+    
+    Production models require: Precision ≥ 0.70, Recall ≥ 0.65, F1 ≥ 0.67, AUC ≥ 0.75
+    """)
+    return
+
+
+@app.cell
 def ml_predictions_header(mo, pipeline_artifacts):
     """Display ML predictions section header.
     
@@ -2318,18 +2678,27 @@ def sov_prediction_distribution_chart(mo, alt, pd, sov_predictions_df):
     if prob_col is None:
         return (None,)
     
+    # Add a classification column for coloring
+    df_with_class = sov_predictions_df.copy()
+    df_with_class["sov_class"] = df_with_class[prob_col].apply(
+        lambda x: "Likely SoV" if x >= 0.5 else "Likely Active"
+    )
+    
     # Create histogram of SoV probabilities
-    sov_hist = alt.Chart(sov_predictions_df).mark_bar().encode(
+    sov_hist = alt.Chart(df_with_class).mark_bar().encode(
         x=alt.X(
             f"{prob_col}:Q",
             bin=alt.Bin(maxbins=20),
             title="SoV Probability",
         ),
         y=alt.Y("count():Q", title="Number of Holders"),
-        color=alt.condition(
-            f"tum.{.{rob_col}}>= 0.5"",
-            alt.value("#F58518"),  # Orange for likely SoV
-            alt.value("#4C78A8"),  # Blue for likely active
+        color=alt.Color(
+            "sov_class:N",
+            scale=alt.Scale(
+                domain=["Likely SoV", "Likely Active"],
+                range=["#F58518", "#4C78A8"]
+            ),
+            legend=alt.Legend(title="Classification")
         ),
         tooltip=[
             alt.Tooltip(f"{prob_col}:Q", title="Probability", format=".2f"),
@@ -2947,7 +3316,7 @@ def display_metrics_trend_chart(mo, metrics_chart):
 
 @app.cell
 def conclusions_analysis_cell(
-    loaded_data,
+    analysis_data,
     activity_breakdown,
     holder_metrics,
     chain_metrics,
@@ -2955,14 +3324,17 @@ def conclusions_analysis_cell(
     generate_conclusions,
     get_data_quality_warnings,
 ):
-    """Calculate confidence and generate conclusions."""
+    """Calculate confidence and generate conclusions.
+    
+    Requirements: 7.1, 7.2, 7.3, 7.4
+    """
     confidence_metrics = None
     conclusions = None
     warnings = None
 
-    if loaded_data is not None:
+    if analysis_data is not None:
         # Calculate confidence
-        confidence_metrics = calculate_confidence(loaded_data.transactions_df)
+        confidence_metrics = calculate_confidence(analysis_data.transactions_df)
 
         # Generate conclusions if we have all the analysis results
         if activity_breakdown and holder_metrics and chain_metrics:
@@ -2971,12 +3343,12 @@ def conclusions_analysis_cell(
                 holder_metrics,
                 chain_metrics,
                 confidence_metrics,
-                loaded_data.errors,
+                analysis_data.errors,
             )
 
         # Get data quality warnings
         warnings = get_data_quality_warnings(
-            loaded_data.errors,
+            analysis_data.errors,
             confidence_metrics,
         )
 
@@ -2986,14 +3358,17 @@ def conclusions_analysis_cell(
 @app.cell
 def summary_panel_display(
     mo,
-    loaded_data,
+    analysis_data,
     confidence_metrics,
     conclusions,
     warnings,
     ConfidenceLevel,
 ):
-    """Display summary panel with key findings and confidence indicators."""
-    if loaded_data is None or confidence_metrics is None:
+    """Display summary panel with key findings and confidence indicators.
+    
+    Requirements: 7.2, 7.3, 7.4
+    """
+    if analysis_data is None or confidence_metrics is None:
         return
 
     # Confidence level styling
@@ -3047,7 +3422,7 @@ def summary_panel_display(
 
     # Sample data indicator
     sample_indicator = ""
-    if loaded_data.is_sample_data:
+    if analysis_data.is_sample_data:
         sample_indicator = """
     > ⚠️ **Note:** This analysis is based on synthetic sample data, not real blockchain data.
     > Results are for demonstration purposes only.
@@ -3073,14 +3448,17 @@ def summary_panel_display(
 @app.cell
 def final_summary(
     mo,
-    loaded_data,
+    analysis_data,
     activity_breakdown,
     holder_metrics,
     confidence_metrics,
     ConfidenceLevel,
 ):
-    """Display final summary answering the main question."""
-    if (loaded_data is None or activity_breakdown is None or
+    """Display final summary answering the main question.
+    
+    Requirements: 7.1, 7.2
+    """
+    if (analysis_data is None or activity_breakdown is None or
             holder_metrics is None or confidence_metrics is None):
         return
 
