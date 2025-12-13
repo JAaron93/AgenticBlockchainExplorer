@@ -9,13 +9,15 @@ Requirements: 14.5
 import hashlib
 import json
 import logging
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import altair as alt
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -87,20 +89,75 @@ class ExportManifest:
 # =============================================================================
 
 class AnalysisJSONEncoder(json.JSONEncoder):
-    """Custom JSON encoder for analysis data types."""
+    """Custom JSON encoder for analysis data types.
+    
+    Handles:
+    - Decimal values (converted to string for precision)
+    - datetime objects (ISO format)
+    - pandas Timestamp (ISO format)
+    - pandas DataFrame (list of records)
+    - NaN/Infinity/-Infinity (converted to None/null)
+    - numpy numeric types
+    - Objects with to_dict() method
+    """
     
     def default(self, obj):
+        # Handle Decimal - check for NaN/Infinity first
         if isinstance(obj, Decimal):
+            try:
+                if obj.is_nan() or obj.is_infinite():
+                    return None
+            except InvalidOperation:
+                pass
             return str(obj)
+        
+        # Handle numpy floating point types - check for non-finite values
+        if isinstance(obj, (np.floating, np.float64, np.float32)):
+            if not np.isfinite(obj):
+                return None
+            return float(obj)
+        
+        # Handle numpy integer types
+        if isinstance(obj, (np.integer, np.int64, np.int32)):
+            return int(obj)
+        
+        # Handle Python float - check for NaN/Infinity
+        if isinstance(obj, float):
+            if not math.isfinite(obj):
+                return None
+            return obj
+        
+        # Handle datetime types
         if isinstance(obj, datetime):
             return obj.isoformat()
         if isinstance(obj, pd.Timestamp):
             return obj.isoformat()
+        
+        # Handle pandas DataFrame
         if isinstance(obj, pd.DataFrame):
             return obj.to_dict(orient="records")
+        
+        # Handle numpy arrays
+        if isinstance(obj, np.ndarray):
+            return self._sanitize_array(obj.tolist())
+        
+        # Handle objects with to_dict method
         if hasattr(obj, "to_dict"):
             return obj.to_dict()
+        
         return super().default(obj)
+    
+    def _sanitize_array(self, arr: list) -> list:
+        """Recursively sanitize array values, converting NaN/Inf to None."""
+        result = []
+        for item in arr:
+            if isinstance(item, list):
+                result.append(self._sanitize_array(item))
+            elif isinstance(item, float) and not math.isfinite(item):
+                result.append(None)
+            else:
+                result.append(item)
+        return result
 
 
 # =============================================================================
@@ -181,9 +238,12 @@ class WebExporter:
         if predictions and self.config.include_predictions:
             self._export_predictions(export_path, predictions, manifest)
         
-        # Export visualizations if provided
+        # Export visualizations if provided and track exported names
+        exported_viz_names: List[str] = []
         if visualizations and self.config.include_visualizations:
-            self._export_visualizations(export_path, visualizations, manifest)
+            exported_viz_names = self._export_visualizations(
+                export_path, visualizations, manifest
+            )
         
         # Generate summary dashboard
         self._export_dashboard(
@@ -194,6 +254,7 @@ class WebExporter:
             data_timestamp or export_timestamp,
             data_completeness,
             manifest,
+            exported_viz_names,
         )
         
         # Write manifest
@@ -246,7 +307,7 @@ class WebExporter:
                     manifest.run_id,
                 )
                 file_path = analysis_dir / filename
-                self._write_json_file(file_path, data, manifest)
+                self._write_json_file(file_path, data, manifest, export_path)
     
     def _wrap_analysis_data(
         self,
@@ -284,7 +345,7 @@ class WebExporter:
                     manifest.model_versions.get(key, "unknown"),
                 )
                 file_path = predictions_dir / filename
-                self._write_json_file(file_path, data, manifest)
+                self._write_json_file(file_path, data, manifest, export_path)
     
     def _wrap_prediction_data(
         self,
@@ -306,15 +367,25 @@ class WebExporter:
         export_path: Path,
         visualizations: Dict[str, alt.Chart],
         manifest: ExportManifest,
-    ) -> None:
-        """Export Altair charts as standalone HTML files."""
+    ) -> List[str]:
+        """Export Altair charts as standalone HTML files.
+        
+        Returns:
+            List of exported visualization names (without .html extension)
+        """
         viz_dir = export_path / "visualizations"
+        exported_names: List[str] = []
         
         for name, chart in visualizations.items():
             if chart is not None:
                 filename = f"{name}.html"
                 file_path = viz_dir / filename
-                self._write_chart_html(file_path, chart, name, manifest)
+                self._write_chart_html(
+                    file_path, chart, name, manifest, export_path
+                )
+                exported_names.append(name)
+        
+        return exported_names
     
     def _write_chart_html(
         self,
@@ -322,6 +393,7 @@ class WebExporter:
         chart: alt.Chart,
         title: str,
         manifest: ExportManifest,
+        export_path: Path,
     ) -> None:
         """Write an Altair chart as standalone HTML."""
         try:
@@ -340,7 +412,7 @@ class WebExporter:
             file_path.write_text(html_content, encoding='utf-8')
             
             # Update manifest
-            file_info = self._get_file_info(file_path, "html")
+            file_info = self._get_file_info(file_path, "html", export_path)
             manifest.files.append(file_info)
             self._total_size += file_info["size_bytes"]
             
@@ -412,6 +484,7 @@ class WebExporter:
         data_timestamp: datetime,
         data_completeness: Optional[Dict[str, Any]],
         manifest: ExportManifest,
+        exported_viz_names: Optional[List[str]] = None,
     ) -> None:
         """Generate the summary dashboard HTML."""
         summary_dir = export_path / "summary"
@@ -419,7 +492,7 @@ class WebExporter:
         # Export conclusions JSON
         conclusions = self._generate_conclusions(analysis_results)
         conclusions_path = summary_dir / "conclusions.json"
-        self._write_json_file(conclusions_path, conclusions, manifest)
+        self._write_json_file(conclusions_path, conclusions, manifest, export_path)
         
         # Generate dashboard HTML
         dashboard_html = self._generate_dashboard_html(
@@ -429,12 +502,13 @@ class WebExporter:
             run_id,
             data_timestamp,
             data_completeness,
+            exported_viz_names or [],
         )
         
         dashboard_path = summary_dir / "dashboard.html"
         dashboard_path.write_text(dashboard_html, encoding='utf-8')
         
-        file_info = self._get_file_info(dashboard_path, "html")
+        file_info = self._get_file_info(dashboard_path, "html", export_path)
         manifest.files.append(file_info)
         self._total_size += file_info["size_bytes"]
     
@@ -483,8 +557,19 @@ class WebExporter:
         run_id: str,
         data_timestamp: datetime,
         data_completeness: Optional[Dict[str, Any]],
+        exported_viz_names: List[str],
     ) -> str:
-        """Generate the combined summary dashboard HTML."""
+        """Generate the combined summary dashboard HTML.
+        
+        Args:
+            analysis_results: Analysis results dictionary
+            predictions: Optional ML predictions
+            conclusions: Generated conclusions
+            run_id: Pipeline run identifier
+            data_timestamp: When data was collected
+            data_completeness: Data completeness information
+            exported_viz_names: List of visualization names that were exported
+        """
         completeness_ratio = 100.0
         if data_completeness:
             completeness_ratio = data_completeness.get("completeness_ratio", 1.0) * 100
@@ -496,6 +581,12 @@ class WebExporter:
                 <span class="finding-type">{finding.get("type", "")}</span>
                 <p>{finding.get("description", "")}</p>
             </div>'''
+        
+        # Build activity analysis section only if visualizations exist
+        activity_section = self._build_activity_section(exported_viz_names)
+        
+        # Build predictions section only if visualizations exist
+        predictions_section = self._build_predictions_section(exported_viz_names)
         
         html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -606,29 +697,7 @@ class WebExporter:
             <h2>Key Findings</h2>
             {findings_html if findings_html else '<p>No findings available.</p>'}
         </section>
-        <section id="activity" aria-label="Activity Analysis">
-            <h2>Activity Analysis</h2>
-            <div class="chart-grid">
-                <div class="chart-embed">
-                    <iframe src="../visualizations/activity_pie.html" title="Activity Distribution"></iframe>
-                </div>
-                <div class="chart-embed">
-                    <iframe src="../visualizations/stablecoin_bar.html" title="Stablecoin Comparison"></iframe>
-                </div>
-            </div>
-        </section>
-        <section id="predictions" aria-label="ML Predictions">
-            <h2>ML Predictions</h2>
-            <div class="chart-grid">
-                <div class="chart-embed">
-                    <iframe src="../visualizations/sov_distribution.html" title="SoV Predictions"></iframe>
-                </div>
-                <div class="chart-embed">
-                    <iframe src="../visualizations/wallet_class_breakdown.html" title="Wallet Classifications"></iframe>
-                </div>
-            </div>
-        </section>
-    </main>
+{activity_section}{predictions_section}    </main>
     <footer>
         <p>Generated by Stablecoin Analysis Pipeline</p>
         <p>Run ID: {run_id}</p>
@@ -637,17 +706,90 @@ class WebExporter:
 </html>'''
         return html
     
+    def _build_activity_section(self, exported_viz_names: List[str]) -> str:
+        """Build the activity analysis section HTML.
+        
+        Only includes iframes for visualizations that were actually exported.
+        Returns empty string if no relevant visualizations exist.
+        """
+        activity_charts = []
+        
+        if "activity_pie" in exported_viz_names:
+            activity_charts.append(
+                '<div class="chart-embed">'
+                '<iframe src="../visualizations/activity_pie.html" '
+                'title="Activity Distribution"></iframe>'
+                '</div>'
+            )
+        
+        if "stablecoin_bar" in exported_viz_names:
+            activity_charts.append(
+                '<div class="chart-embed">'
+                '<iframe src="../visualizations/stablecoin_bar.html" '
+                'title="Stablecoin Comparison"></iframe>'
+                '</div>'
+            )
+        
+        if not activity_charts:
+            return ""
+        
+        charts_html = "\n                ".join(activity_charts)
+        return f'''        <section id="activity" aria-label="Activity Analysis">
+            <h2>Activity Analysis</h2>
+            <div class="chart-grid">
+                {charts_html}
+            </div>
+        </section>
+'''
+    
+    def _build_predictions_section(self, exported_viz_names: List[str]) -> str:
+        """Build the ML predictions section HTML.
+        
+        Only includes iframes for visualizations that were actually exported.
+        Returns empty string if no relevant visualizations exist.
+        """
+        prediction_charts = []
+        
+        if "sov_distribution" in exported_viz_names:
+            prediction_charts.append(
+                '<div class="chart-embed">'
+                '<iframe src="../visualizations/sov_distribution.html" '
+                'title="SoV Predictions"></iframe>'
+                '</div>'
+            )
+        
+        if "wallet_class_breakdown" in exported_viz_names:
+            prediction_charts.append(
+                '<div class="chart-embed">'
+                '<iframe src="../visualizations/wallet_class_breakdown.html" '
+                'title="Wallet Classifications"></iframe>'
+                '</div>'
+            )
+        
+        if not prediction_charts:
+            return ""
+        
+        charts_html = "\n                ".join(prediction_charts)
+        return f'''        <section id="predictions" aria-label="ML Predictions">
+            <h2>ML Predictions</h2>
+            <div class="chart-grid">
+                {charts_html}
+            </div>
+        </section>
+'''
+    
     def _write_json_file(
         self,
         file_path: Path,
         data: Any,
         manifest: ExportManifest,
+        export_path: Path,
     ) -> None:
         """Write data to a JSON file and update manifest."""
         content = json.dumps(data, cls=AnalysisJSONEncoder, indent=2)
         file_path.write_text(content, encoding='utf-8')
         
-        file_info = self._get_file_info(file_path, "json")
+        file_info = self._get_file_info(file_path, "json", export_path)
         manifest.files.append(file_info)
         self._total_size += file_info["size_bytes"]
         
@@ -670,11 +812,30 @@ class WebExporter:
         content = json.dumps(manifest.to_dict(), indent=2)
         manifest_path.write_text(content, encoding='utf-8')
     
-    def _get_file_info(self, file_path: Path, file_type: str) -> dict:
-        """Get file metadata for manifest."""
+    def _get_file_info(
+        self, file_path: Path, file_type: str, base_path: Path
+    ) -> dict:
+        """Get file metadata for manifest.
+        
+        Args:
+            file_path: Path to the file
+            file_type: Type of file (e.g., "json", "html")
+            base_path: Base path for computing relative path
+            
+        Returns:
+            Dictionary with file metadata including path, type, size, and checksum
+        """
         content = file_path.read_bytes()
+        
+        # Compute relative path with fallback to absolute path string
+        try:
+            relative_path = str(file_path.relative_to(base_path))
+        except ValueError:
+            # Fallback if file_path is not relative to base_path
+            relative_path = str(file_path)
+        
         return {
-            "path": str(file_path.relative_to(file_path.parent.parent)),
+            "path": relative_path,
             "type": file_type,
             "size_bytes": len(content),
             "checksum_sha256": hashlib.sha256(content).hexdigest(),

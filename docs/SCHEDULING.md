@@ -19,6 +19,53 @@ The scheduling configuration is stored in `config/scheduling.json`. This file de
 - Notification settings
 - Retry policies
 
+**Example config/scheduling.json:**
+
+```json
+{
+  "schedules": [
+    {
+      "name": "weekly_master_pipeline",
+      "pipeline": "master_pipeline",
+      "cron_expression": "0 0 * * 0",
+      "parameters": {
+        "stablecoins": ["USDC", "USDT"],
+        "date_range_days": 7,
+        "max_records": 1000,
+        "min_successful_collectors": 2,
+        "aggregation": "daily",
+        "top_n_holders": 10,
+        "run_ml_inference": true
+      },
+      "notifications": {
+        "on_failure": ["ops-team@example.com"],
+        "on_success": false
+      },
+      "retry_policy": {
+        "max_retries": 3,
+        "backoff_multiplier": 2.0
+      }
+    },
+    {
+      "name": "daily_collection",
+      "pipeline": "collection_pipeline",
+      "cron_expression": "0 */6 * * *",
+      "parameters": {
+        "stablecoins": ["USDC", "USDT"],
+        "date_range_days": 1
+      },
+      "notifications": {
+        "on_failure": ["alerts@example.com"]
+      },
+      "retry_policy": {
+        "max_retries": 2,
+        "backoff_multiplier": 1.5
+      }
+    }
+  ]
+}
+```
+
 ### Cron Expression Reference
 
 | Expression | Description |
@@ -94,7 +141,9 @@ cd "${PROJECT_DIR}"
 
 # Load environment variables
 if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+    set -a
+    source .env
+    set +a
 fi
 
 # Run the pipeline

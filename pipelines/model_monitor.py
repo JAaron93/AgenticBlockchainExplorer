@@ -95,7 +95,7 @@ class MonitoringConfig:
             return cls()
         
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding='utf-8') as f:
                 data = json.load(f)
             
             thresholds = {}
@@ -416,17 +416,31 @@ class ModelPerformanceMonitor:
                 f"Recommendation: {result.recommendation}"
             )
         
-        # Slack alert
-        if channels.get("slack", {}).get("enabled", False):
-            webhook_url = channels["slack"].get("webhook_url")
-            if webhook_url:
+        # Slack alert - validate webhook_url is non-empty before sending
+        slack_config = channels.get("slack", {})
+        if slack_config.get("enabled", False):
+            webhook_url = slack_config.get("webhook_url", "")
+            if webhook_url and webhook_url.strip():
                 self._send_slack_alert(result, webhook_url)
+            else:
+                logger.warning(
+                    "Slack alerts enabled but webhook_url is empty or missing. "
+                    "Skipping Slack alert."
+                )
         
-        # Email alert
-        if channels.get("email", {}).get("enabled", False):
-            recipients = channels["email"].get("recipients", [])
-            if recipients:
-                self._send_email_alert(result, recipients)
+        # Email alert - validate recipients list is non-empty before sending
+        email_config = channels.get("email", {})
+        if email_config.get("enabled", False):
+            recipients = email_config.get("recipients", [])
+            # Filter out empty strings from recipients list
+            valid_recipients = [r for r in recipients if r and r.strip()]
+            if valid_recipients:
+                self._send_email_alert(result, valid_recipients)
+            else:
+                logger.warning(
+                    "Email alerts enabled but recipients list is empty. "
+                    "Skipping email alert."
+                )
     
     def _send_slack_alert(
         self, result: MonitoringResult, webhook_url: str
