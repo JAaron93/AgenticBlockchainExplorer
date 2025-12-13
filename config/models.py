@@ -248,13 +248,56 @@ class CORSConfig(BaseModel):
 
 class SessionConfig(BaseModel):
     """Configuration for session management."""
-    
-    timeout_hours: int = Field(default=24, ge=1, le=168, description="Session timeout in hours")
+
+    timeout_hours: int = Field(
+        default=24, ge=1, le=168, description="Session timeout in hours"
+    )
     cookie_secure: bool = Field(default=True, description="Secure cookie flag")
-    cookie_httponly: bool = Field(default=True, description="HttpOnly cookie flag")
+    cookie_httponly: bool = Field(
+        default=True, description="HttpOnly cookie flag"
+    )
     cookie_samesite: Literal["lax", "strict", "none"] = Field(
         default="lax",
         description="SameSite cookie attribute"
+    )
+
+
+class CredentialSanitizerConfig(BaseModel):
+    """Configuration for credential sanitization.
+
+    Defines patterns and names used to detect and redact sensitive
+    credentials from logs, error messages, and API responses.
+
+    Requirements: 1.6, 1.7, 1.8, 1.9
+    """
+
+    sensitive_param_names: List[str] = Field(
+        default=[
+            "apikey",
+            "api_key",
+            "API_KEY",
+            "token",
+            "auth_token",
+            "secret",
+            "password",
+            "client_secret",
+        ],
+        description="Parameter names that indicate credential values",
+    )
+    sensitive_header_names: List[str] = Field(
+        default=["Authorization", "X-API-Key", "X-Auth-Token"],
+        description="HTTP header names that contain credentials",
+    )
+    credential_patterns: List[str] = Field(
+        default=[
+            r"[a-zA-Z0-9]{32,}",  # 32+ char alphanumeric (API keys)
+            r"eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+",  # JWT
+        ],
+        description="Regex patterns matching credential formats",
+    )
+    redaction_placeholder: str = Field(
+        default="[REDACTED]",
+        description="Placeholder text to replace redacted credentials",
     )
 
 
