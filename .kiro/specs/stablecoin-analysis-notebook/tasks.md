@@ -213,25 +213,25 @@
     - **Property 17: SoV prediction probability bounds**
     - **Validates: Requirements 11.5**
 
-- [ ] 13. Implement wallet behavior classifier
-  - [ ] 13.1 Define wallet behavior classes and labeling logic
+- [x] 13. Implement wallet behavior classifier
+  - [x] 13.1 Define wallet behavior classes and labeling logic
     - Create `pipelines/steps/wallet_classifier.py`
     - Define classes: trader, holder, whale, retail
     - Implement labeling function based on thresholds
     - _Requirements: 12.1_
-  - [ ] 13.2 Implement wallet classifier training step
+  - [x] 13.2 Implement wallet classifier training step
     - Implement `train_wallet_classifier_step`
     - Use multi-class RandomForest or XGBoost
     - Log metrics and register model
     - _Requirements: 12.3_
-  - [ ] 13.3 Implement wallet classification inference step
+  - [x] 13.3 Implement wallet classification inference step
     - Implement `classify_wallets_step`
     - Assign exactly one class per wallet with confidence
     - _Requirements: 12.4_
-  - [ ] 13.4 Write property test for wallet classification exclusivity
+  - [x] 13.4 Write property test for wallet classification exclusivity
     - **Property 18: Wallet classification exclusivity**
     - **Validates: Requirements 12.4**
-  - [ ] 13.5 Write property test for model metrics validity
+  - [x] 13.5 Write property test for model metrics validity
     - **Property 19: Model metrics validity**
     - **Validates: Requirements 11.3, 15.2**
 

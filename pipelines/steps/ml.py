@@ -225,9 +225,14 @@ def compute_holder_features(
         features["balance_volatility"] = (features["from_std"] + features["to_std"]) / 2
         features["balance_volatility"] = features["balance_volatility"].fillna(0)
         
-        # Calculate cross-chain flag
-        from_chains = transactions_df.groupby("from_lower")["chain"].nunique()
-        to_chains = transactions_df.groupby("to_lower")["chain"].nunique()
+        # Calculate cross-chain flag (with defensive check for 'chain' column)
+        if "chain" in transactions_df.columns:
+            from_chains = transactions_df.groupby("from_lower")["chain"].nunique()
+            to_chains = transactions_df.groupby("to_lower")["chain"].nunique()
+        else:
+            # No chain column - assume single chain
+            from_chains = pd.Series(dtype=int)
+            to_chains = pd.Series(dtype=int)
         
         features["from_chains"] = features["address_lower"].map(from_chains).fillna(0)
         features["to_chains"] = features["address_lower"].map(to_chains).fillna(0)
@@ -449,10 +454,40 @@ def train_sov_predictor_step(
         X = merged[REQUIRED_FEATURES].values
         y = merged["is_store_of_value"].astype(int).values
         
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state, stratify=y
+        # Split data with stratification if possible
+        # Stratified split requires at least 2 samples per class in both train and test
+        unique_classes, class_counts = np.unique(y, return_counts=True)
+        min_class_count = class_counts.min() if len(class_counts) > 0 else 0
+        min_samples_for_stratify = max(2, int(np.ceil(1 / test_size)))
+        
+        use_stratify = (
+            len(unique_classes) > 1 and  # Need at least 2 classes
+            min_class_count >= min_samples_for_stratify  # Enough samples per class
         )
+        
+        if use_stratify:
+            try:
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=test_size, random_state=random_state, stratify=y
+                )
+                logger.debug("Using stratified train/test split")
+            except ValueError as e:
+                # Fallback to non-stratified split if stratification fails
+                logger.warning(
+                    f"Stratified split failed ({e}), falling back to random split"
+                )
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=test_size, random_state=random_state, stratify=None
+                )
+        else:
+            # Single class or insufficient samples - use non-stratified split
+            logger.warning(
+                f"Cannot use stratified split: {len(unique_classes)} classes, "
+                f"min class count={min_class_count}. Using random split."
+            )
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=random_state, stratify=None
+            )
         
         # Train model
         if algorithm == "xgboost":

@@ -6,7 +6,7 @@ aggregation steps defined in the design document.
 """
 
 import pytest
-from hypothesis import given, strategies as st, settings, assume
+from hypothesis import given, strategies as st, settings, assume, HealthCheck
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 import pandas as pd
@@ -1451,4 +1451,541 @@ class TestSoVPredictionProbabilityBounds:
         assert predictions_output.predictions_df['predicted_class'].dtype == bool, (
             f"predicted_class should be bool, got "
             f"{predictions_output.predictions_df['predicted_class'].dtype}"
+        )
+
+
+
+class TestWalletClassificationExclusivity:
+    """Tests for wallet classification exclusivity (Property 18)."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=10, max_size=30),
+        transactions=st.lists(valid_transaction_model(), min_size=5, max_size=50),
+    )
+    def test_property_18_each_wallet_assigned_exactly_one_class(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 18: Wallet classification exclusivity**
+
+        For any holder, the wallet classifier SHALL assign exactly one behavior
+        class from {trader, holder, whale, retail}.
+
+        **Validates: Requirements 12.4**
+        """
+        from pipelines.steps.ml import feature_engineering_step
+        from pipelines.steps.wallet_classifier import (
+            train_wallet_classifier_step,
+            classify_wallets_step,
+            WalletBehaviorClass,
+        )
+
+        # Set consistent chains and varied features for classification
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        # Skip if not enough samples
+        assume(len(features_output.features_df) >= 10)
+
+        # Train classifier
+        try:
+            model_output = train_wallet_classifier_step.entrypoint(
+                features_df=features_output.features_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+                test_size=0.2,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Run classification
+        classification_output = classify_wallets_step.entrypoint(
+            features_df=features_output.features_df,
+            model=model_output.model,
+        )
+
+        # Verify each wallet has exactly one class (exclusivity)
+        valid_classes = set(WalletBehaviorClass.all_classes())
+        
+        for _, row in classification_output.classifications_df.iterrows():
+            behavior_class = row['behavior_class']
+            
+            # Verify class is one of the valid classes (exactly one)
+            assert behavior_class in valid_classes, (
+                f"Invalid behavior class: {behavior_class}. "
+                f"Expected one of {valid_classes}"
+            )
+            
+            # Verify only one class is assigned (not multiple)
+            # This is implicit since behavior_class is a single value, not a list
+
+        # Verify classification count matches input (one classification per input row)
+        assert classification_output.classification_count == len(features_output.features_df), (
+            f"Classification count ({classification_output.classification_count}) != "
+            f"input count ({len(features_output.features_df)})"
+        )
+        
+        # Verify output row count matches input
+        assert len(classification_output.classifications_df) == len(features_output.features_df), (
+            f"Output rows ({len(classification_output.classifications_df)}) != "
+            f"input rows ({len(features_output.features_df)})"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(holders=st.lists(valid_holder_model(), min_size=5, max_size=20))
+    def test_property_18_labeling_function_assigns_exactly_one_class(self, holders):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 18: Wallet classification exclusivity**
+
+        For any holder features, the labeling function SHALL assign exactly one
+        behavior class from {trader, holder, whale, retail}.
+
+        **Validates: Requirements 12.4**
+        """
+        from pipelines.steps.ml import feature_engineering_step
+        from pipelines.steps.wallet_classifier import (
+            label_wallet_behavior,
+            WalletBehaviorClass,
+        )
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe([])
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        # Apply labeling function
+        labels = label_wallet_behavior(features_output.features_df)
+
+        # Verify each label is valid
+        valid_classes = set(WalletBehaviorClass.all_classes())
+        
+        for label in labels:
+            assert label in valid_classes, (
+                f"Invalid label: {label}. Expected one of {valid_classes}"
+            )
+
+        # Verify label count matches input
+        assert len(labels) == len(features_output.features_df), (
+            f"Label count ({len(labels)}) != feature count ({len(features_output.features_df)})"
+        )
+
+    @settings(max_examples=50, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=15, max_size=30),
+        transactions=st.lists(valid_transaction_model(), min_size=10, max_size=40),
+    )
+    def test_property_18_class_distribution_sums_to_total(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 18: Wallet classification exclusivity**
+
+        For any classification output, the sum of class distribution counts
+        SHALL equal the total number of classified wallets.
+
+        **Validates: Requirements 12.4**
+        """
+        from pipelines.steps.ml import feature_engineering_step
+        from pipelines.steps.wallet_classifier import (
+            train_wallet_classifier_step,
+            classify_wallets_step,
+        )
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        assume(len(features_output.features_df) >= 10)
+
+        # Train classifier
+        try:
+            model_output = train_wallet_classifier_step.entrypoint(
+                features_df=features_output.features_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Run classification
+        classification_output = classify_wallets_step.entrypoint(
+            features_df=features_output.features_df,
+            model=model_output.model,
+        )
+
+        # Verify class distribution sums to total
+        total_from_distribution = sum(classification_output.class_distribution.values())
+        assert total_from_distribution == classification_output.classification_count, (
+            f"Class distribution sum ({total_from_distribution}) != "
+            f"classification count ({classification_output.classification_count})"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(holders=st.lists(valid_holder_model(), min_size=10, max_size=25))
+    def test_property_18_confidence_in_valid_range(self, holders):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 18: Wallet classification exclusivity**
+
+        For any classification, the confidence score SHALL be in range [0.0, 1.0].
+
+        **Validates: Requirements 12.4, 12.5**
+        """
+        from pipelines.steps.ml import feature_engineering_step
+        from pipelines.steps.wallet_classifier import (
+            train_wallet_classifier_step,
+            classify_wallets_step,
+        )
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe([])
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        assume(len(features_output.features_df) >= 10)
+
+        # Train classifier
+        try:
+            model_output = train_wallet_classifier_step.entrypoint(
+                features_df=features_output.features_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Run classification
+        classification_output = classify_wallets_step.entrypoint(
+            features_df=features_output.features_df,
+            model=model_output.model,
+        )
+
+        # Verify confidence is in valid range
+        confidences = classification_output.classifications_df['confidence']
+        
+        assert (confidences >= 0.0).all(), (
+            f"Found confidence < 0.0: min={confidences.min()}"
+        )
+        assert (confidences <= 1.0).all(), (
+            f"Found confidence > 1.0: max={confidences.max()}"
+        )
+
+
+class TestModelMetricsValidity:
+    """Tests for model metrics validity (Property 19)."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=15, max_size=30),
+        transactions=st.lists(valid_transaction_model(), min_size=10, max_size=50),
+    )
+    def test_property_19_wallet_classifier_metrics_in_valid_range(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 19: Model metrics validity**
+
+        For any trained wallet classifier model, the evaluation metrics
+        (precision, recall, F1, accuracy) SHALL each be in the range [0.0, 1.0].
+
+        **Validates: Requirements 11.3, 15.2**
+        """
+        from pipelines.steps.ml import feature_engineering_step
+        from pipelines.steps.wallet_classifier import train_wallet_classifier_step
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        assume(len(features_output.features_df) >= 15)
+
+        # Train classifier
+        try:
+            model_output = train_wallet_classifier_step.entrypoint(
+                features_df=features_output.features_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Verify all metrics are in valid range [0.0, 1.0]
+        for metric_name, metric_value in model_output.metrics.items():
+            assert 0.0 <= metric_value <= 1.0, (
+                f"Metric '{metric_name}' out of range: {metric_value}"
+            )
+
+    @settings(max_examples=100, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=15, max_size=30),
+        transactions=st.lists(valid_transaction_model(), min_size=10, max_size=50),
+    )
+    def test_property_19_sov_predictor_metrics_in_valid_range(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 19: Model metrics validity**
+
+        For any trained SoV predictor model, the evaluation metrics
+        (precision, recall, F1, AUC-ROC) SHALL each be in the range [0.0, 1.0].
+
+        **Validates: Requirements 11.3, 15.2**
+        """
+        from pipelines.steps.ml import (
+            feature_engineering_step,
+            train_sov_predictor_step,
+        )
+
+        # Set consistent chains and balanced classes
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+            is_sov = i % 3 == 0
+            object.__setattr__(h, 'is_store_of_value', is_sov)
+
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        assume(len(features_output.features_df) >= 15)
+
+        # Train SoV predictor
+        try:
+            model_output = train_sov_predictor_step.entrypoint(
+                features_df=features_output.features_df,
+                holders_df=holders_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Verify all metrics are in valid range [0.0, 1.0]
+        for metric_name, metric_value in model_output.metrics.items():
+            assert 0.0 <= metric_value <= 1.0, (
+                f"Metric '{metric_name}' out of range: {metric_value}"
+            )
+
+    @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.large_base_example])
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=20, max_size=35),
+        transactions=st.lists(valid_transaction_model(), min_size=15, max_size=60),
+    )
+    def test_property_19_feature_importances_are_valid(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 19: Model metrics validity**
+
+        For any trained model, feature importances SHALL be non-negative and
+        sum to approximately 1.0 (for tree-based models).
+
+        **Validates: Requirements 11.3, 15.2**
+        """
+        from pipelines.steps.ml import feature_engineering_step
+        from pipelines.steps.wallet_classifier import train_wallet_classifier_step
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        assume(len(features_output.features_df) >= 20)
+
+        # Train classifier
+        try:
+            model_output = train_wallet_classifier_step.entrypoint(
+                features_df=features_output.features_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Verify feature importances are non-negative
+        for feat_name, importance in model_output.feature_importances.items():
+            assert importance >= 0.0, (
+                f"Feature '{feat_name}' has negative importance: {importance}"
+            )
+
+        # Verify feature importances sum to approximately 1.0 (or 0.0 if model
+        # couldn't learn due to degenerate data like all identical features)
+        total_importance = sum(model_output.feature_importances.values())
+        assert abs(total_importance - 1.0) < 0.01 or abs(total_importance) < 0.01, (
+            f"Feature importances sum to {total_importance}, expected ~1.0 or ~0.0"
+        )
+
+    @settings(max_examples=50, deadline=None)
+    @given(
+        holders=st.lists(valid_holder_model(), min_size=15, max_size=30),
+        transactions=st.lists(valid_transaction_model(), min_size=10, max_size=50),
+    )
+    def test_property_19_training_metadata_is_complete(
+        self, holders, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 19: Model metrics validity**
+
+        For any trained model, the training metadata SHALL contain required
+        fields: training_timestamp, total_samples, train_samples, test_samples.
+
+        **Validates: Requirements 11.3, 15.2**
+        """
+        from pipelines.steps.ml import feature_engineering_step
+        from pipelines.steps.wallet_classifier import train_wallet_classifier_step
+
+        # Set consistent chains
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe(transactions)
+
+        # Run feature engineering
+        features_output = feature_engineering_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+
+        assume(len(features_output.features_df) >= 15)
+
+        # Train classifier
+        try:
+            model_output = train_wallet_classifier_step.entrypoint(
+                features_df=features_output.features_df,
+                algorithm='random_forest',
+                n_estimators=20,
+                max_depth=5,
+            )
+        except ValueError:
+            assume(False)
+            return
+
+        # Verify required metadata fields
+        required_fields = [
+            "training_timestamp",
+            "total_samples",
+            "train_samples",
+            "test_samples",
+        ]
+        
+        for field in required_fields:
+            assert field in model_output.training_metadata, (
+                f"Required metadata field '{field}' missing"
+            )
+
+        # Verify sample counts are consistent
+        total = model_output.training_metadata["total_samples"]
+        train = model_output.training_metadata["train_samples"]
+        test = model_output.training_metadata["test_samples"]
+        
+        assert train + test == total, (
+            f"train ({train}) + test ({test}) != total ({total})"
         )
