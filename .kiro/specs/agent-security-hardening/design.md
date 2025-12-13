@@ -26,6 +26,9 @@ The implementation adds security layers to the existing collector infrastructure
 │  │  Safe Path   │  │  Response    │  │    Secure Logger         │  │
 │  │  Handler     │  │  Size Limiter│  │  (Redaction Filter)      │  │
 │  └──────────────┘  └──────────────┘  └──────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │              Response Schema Validator                        │  │
+│  └──────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
             │
 ┌───────────▼─────────────────────────────────────────────────────────┐
@@ -245,7 +248,83 @@ class BlockchainDataValidator:
         """Validate block number is positive and not too far in future."""
 ```
 
-### 6. SafePathHandler
+### 6. ResponseSchemaValidator
+
+Validates API responses against JSON schemas.
+
+```python
+class SchemaFallbackStrategy(Enum):
+    """Fallback strategy when schema validation cannot be performed."""
+    FAIL_CLOSED = "fail-closed"      # Reject unvalidated responses (default)
+    SKIP_VALIDATION = "skip-validation"  # Allow without validation, log warning
+    PERMISSIVE_DEFAULT = "permissive-default"  # Use minimal built-in schema
+
+
+class ResponseSchemaValidator:
+    """Validates explorer API responses against JSON schemas."""
+    
+    MAX_NESTING_DEPTH = 10
+    
+    def __init__(
+        self,
+        schema_directory: Path = Path("schemas"),
+        fallback_strategy: SchemaFallbackStrategy = SchemaFallbackStrategy.FAIL_CLOSED,
+        enable_hot_reload: bool = False,
+    ):
+        """Initialize with schema directory path and fallback strategy."""
+        self._schemas: Dict[str, dict] = {}  # endpoint -> schema
+        self._fallback_strategy = fallback_strategy
+        self._schema_load_errors: List[str] = []
+        
+    def load_schemas(self) -> None:
+        """Load all JSON schemas from schema directory.
+        
+        Expected structure:
+        schemas/
+        ├── etherscan/
+        │   ├── tokentx.json
+        │   └── tokenholderlist.json
+        ├── bscscan/
+        │   └── ...
+        └── polygonscan/
+            └── ...
+        """
+        
+    def validate(
+        self, 
+        response: dict, 
+        explorer: str, 
+        endpoint: str
+    ) -> ValidationResult:
+        """Validate response against schema for explorer/endpoint.
+        
+        Args:
+            response: The API response dictionary
+            explorer: Explorer name (e.g., "etherscan")
+            endpoint: API endpoint (e.g., "tokentx")
+            
+        Returns:
+            ValidationResult with is_valid, errors, and field_paths
+        """
+        
+    def _check_nesting_depth(self, obj: Any, current_depth: int = 0) -> bool:
+        """Check if object nesting exceeds MAX_NESTING_DEPTH."""
+        
+    def get_schema_version(self, explorer: str, endpoint: str) -> Optional[str]:
+        """Get schema version for logging/debugging."""
+
+
+@dataclass
+class ValidationResult:
+    """Result of schema validation."""
+    
+    is_valid: bool
+    errors: List[str]  # Error descriptions (no raw values)
+    field_paths: List[str]  # Paths to invalid fields (e.g., "result[0].hash")
+    schema_version: Optional[str] = None
+```
+
+### 7. SafePathHandler
 
 Ensures file paths stay within allowed directories.
 
@@ -273,11 +352,14 @@ class SafePathHandler:
 
 ### 7. ResourceLimiter
 
-Monitors and enforces resource limits.
+Monitors and enforces resource limits including memory, CPU, and regex safety.
 
 ```python
 class ResourceLimiter:
     """Monitors and enforces resource consumption limits."""
+    
+    # Maximum input size for regex operations to prevent ReDoS
+    MAX_REGEX_INPUT_SIZE = 10000  # characters
     
     def __init__(self, config: ResourceLimitConfig):
         """Initialize with configured limits."""
@@ -291,11 +373,134 @@ class ResourceLimiter:
     def check_file_size(self, size: int) -> None:
         """Raise error if file size exceeds limit."""
         
+    def check_cpu_usage(self) -> None:
+        """Raise error if CPU time approaches limit.
+        
+        Uses resource.getrusage() on Unix to check process CPU time.
+        Fails fast if CPU time exceeds configured threshold.
+        """
+        
     def get_current_memory_mb(self) -> float:
         """Get current process memory usage in MB."""
+        
+    def get_current_cpu_seconds(self) -> float:
+        """Get current process CPU time in seconds."""
+        
+    @staticmethod
+    def safe_regex_match(
+        pattern: re.Pattern,
+        text: str,
+        max_input_size: int = MAX_REGEX_INPUT_SIZE,
+    ) -> Optional[re.Match]:
+        """Safely match regex with input size limit to prevent ReDoS.
+        
+        Args:
+            pattern: Pre-compiled regex pattern (must be anchored, no catastrophic backtracking)
+            text: Input text to match
+            max_input_size: Maximum input size to process
+            
+        Returns:
+            Match object or None if no match or input too large
+            
+        Note:
+            All regex patterns used in security components MUST be:
+            - Pre-compiled at module load time
+            - Anchored (^ and $) where appropriate
+            - Free of catastrophic backtracking patterns (nested quantifiers)
+            - Tested against ReDoS attack patterns
+        """
 ```
 
-### 8. TimeoutManager
+**Regex Safety Guidelines:**
+- All patterns pre-compiled at module load time
+- Patterns anchored with `^` and `$` where appropriate
+- No nested quantifiers (e.g., `(a+)+` is forbidden)
+- Input size limited before regex operations
+- Consider using `regex` library with timeout support for complex patterns
+
+### 8. CircuitBreaker
+
+Implements circuit-breaker pattern for explorer API resilience.
+
+```python
+class CircuitBreakerState(Enum):
+    """Circuit breaker states."""
+    CLOSED = "closed"      # Normal operation, requests allowed
+    OPEN = "open"          # Failures exceeded threshold, requests blocked
+    HALF_OPEN = "half_open"  # Testing if service recovered
+
+
+class CircuitBreaker:
+    """Circuit breaker for explorer API resilience."""
+    
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        cool_down_seconds: float = 300.0,  # 5 minutes
+        half_open_success_threshold: int = 1,
+        half_open_failure_threshold: int = 1,
+        logger: Optional[SecureLogger] = None,
+    ):
+        """Initialize circuit breaker.
+        
+        Args:
+            failure_threshold: Number of failures before CLOSED→OPEN
+            cool_down_seconds: Time in OPEN before auto-transition to HALF-OPEN
+            half_open_success_threshold: Consecutive successes for HALF-OPEN→CLOSED
+            half_open_failure_threshold: Failures for HALF-OPEN→OPEN (immediate)
+            logger: Logger for state transitions
+        """
+        self._state = CircuitBreakerState.CLOSED
+        self._failure_count = 0
+        self._success_count = 0  # For half-open tracking
+        self._last_failure_time: Optional[float] = None
+        self._last_state_change: Optional[float] = None
+        
+    @property
+    def state(self) -> CircuitBreakerState:
+        """Get current circuit state."""
+        
+    def is_allowed(self) -> bool:
+        """Check if request is allowed through circuit."""
+        
+    def record_success(self) -> None:
+        """Record successful request, reset failure count."""
+        
+    def record_failure(self) -> None:
+        """Record failed request, potentially open circuit."""
+        
+    def _transition_to(self, new_state: CircuitBreakerState) -> None:
+        """Transition to new state with logging."""
+
+
+class ExponentialBackoff:
+    """Calculates exponential backoff delays with jitter."""
+    
+    def __init__(
+        self,
+        base_delay: float = 1.0,
+        multiplier: float = 2.0,
+        max_delay: float = 60.0,
+        max_retries: int = 5,
+    ):
+        """Initialize backoff calculator."""
+        
+    def get_delay(self, attempt: int) -> float:
+        """Get delay for given attempt number (with jitter)."""
+        
+    def get_delay_honoring_headers(
+        self,
+        attempt: int,
+        retry_after: Optional[int] = None,
+        rate_limit_reset: Optional[int] = None,
+    ) -> float:
+        """Get delay honoring rate-limit headers if present."""
+        
+    def is_within_budget(self, delay: float, remaining_time: float) -> bool:
+        """Check if delay fits within remaining time budget."""
+```
+
+### 9. TimeoutManager
 
 Manages collection timeouts at multiple levels.
 
@@ -615,6 +820,10 @@ Based on the prework analysis, the following correctness properties must be veri
 *For any* filename after sanitization, it SHALL NOT contain path traversal sequences (../, ..\) or null bytes.
 **Validates: Requirements 5.3**
 
+### Property 11: Schema Validation Rejects Invalid Structure
+*For any* API response with missing required fields, incorrect types, or nesting depth exceeding the limit, the schema validator SHALL return is_valid=False with error descriptions containing only field paths (not raw values).
+**Validates: Requirements 4.8, 4.9**
+
 ## Error Handling
 
 ### Security Errors
@@ -690,8 +899,28 @@ tests/
 │   ├── test_safe_path_handler.py         # Unit + Property tests
 │   ├── test_resource_limiter.py          # Unit tests
 │   ├── test_timeout_manager.py           # Unit tests
-│   └── test_secure_http_client.py        # Integration tests
+│   ├── test_circuit_breaker.py           # Unit tests
+│   ├── test_secure_http_client.py        # Integration tests
+│   ├── test_integration.py               # Full-agent integration tests
+│   └── test_chaos.py                     # Chaos/failure injection tests
 ```
+
+### Integration Tests (test_integration.py)
+
+Full-agent flow tests verifying security components work together:
+
+1. **Timeout and partial results**: Verify GracefulTerminator persists partial results on overall and per-collection timeouts
+2. **Error isolation**: Assert SSRFError in one collection does not suppress other collections' results
+3. **Concurrent collection safety**: Run concurrent collections to detect race conditions in SSRFProtector._dns_cache and TimeoutManager state
+
+### Chaos Tests (test_chaos.py)
+
+Failure injection tests using pytest fixtures and monkeypatching:
+
+1. **DNS resolution failures**: Simulate DNS failures and verify SSRFProtector handles gracefully
+2. **Cascade failures**: Block all requests via SSRFProtector and ensure partial results still persist
+3. **Resource exhaustion**: Inject near-limit responses (10MB) and memory spikes to confirm agent terminates cleanly
+4. **Circuit breaker trips**: Simulate repeated failures to trigger circuit breaker and verify recovery
 
 ### Property Test Annotations
 

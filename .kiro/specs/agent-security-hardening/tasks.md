@@ -67,7 +67,9 @@
     - Implement check_response_size() method
     - Implement check_memory_usage() with psutil
     - Implement check_file_size() method
-    - Implement get_current_memory_mb() method
+    - Implement check_cpu_usage() using resource.getrusage() on Unix
+    - Implement get_current_memory_mb() and get_current_cpu_seconds() methods
+    - Implement safe_regex_match() with input size limit for ReDoS protection
     - _Requirements: 3.1, 3.2, 3.5, 3.6_
   - [ ]* 3.3 Write property test for response size enforcement
     - **Property 4: Response Size Enforcement**
@@ -83,181 +85,241 @@
     - Test termination logging
     - _Requirements: 3.7, 3.8, 3.9, 3.10_
 
-- [ ] 4. Checkpoint - Ensure all high priority tests pass
+- [ ] 4. Implement Retry and Circuit Breaker Protection
+  - [ ] 4.1 Implement ExponentialBackoff class in core/security/circuit_breaker.py
+    - Implement get_delay() with configurable base, multiplier, max delay
+    - Implement get_delay_honoring_headers() for Retry-After and X-RateLimit-Reset
+    - Implement is_within_budget() with placeholder accepting remaining_seconds parameter
+    - **Note**: is_within_budget() takes remaining_seconds as parameter; integration with TimeoutManager (Task 8) happens in Task 11 (SecureHTTPClient)
+    - _Requirements: 3.11, 3.12, 3.20, 3.21_
+  - [ ] 4.2 Implement CircuitBreaker class in core/security/circuit_breaker.py
+    - Define CircuitBreakerState enum (CLOSED, OPEN, HALF_OPEN)
+    - Implement is_allowed(), record_success(), record_failure() methods
+    - Implement _transition_to() with structured logging
+    - _Requirements: 3.13, 3.14_
+  - [ ]* 4.3 Write unit tests for exponential backoff
+    - Test delay calculation with various attempts
+    - Test header honoring (Retry-After, X-RateLimit-Reset)
+    - Test budget enforcement
+    - _Requirements: 3.11, 3.12, 3.15_
+  - [ ]* 4.4 Write unit tests for circuit breaker
+    - Test state transitions (closed→open→half-open→closed)
+    - Test failure threshold triggering
+    - Test cool-down window behavior
+    - Test logging of state transitions
+    - _Requirements: 3.13, 3.14_
+
+- [ ] 5. Checkpoint - Ensure all high priority tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Medium Priority Tasks
 
-- [ ] 5. Implement Blockchain Data Validation
-  - [ ] 5.1 Implement BlockchainDataValidator class in core/security/blockchain_validator.py
+- [ ] 6. Implement Blockchain Data Validation
+  - [ ] 6.1 Implement BlockchainDataValidator class in core/security/blockchain_validator.py
     - Define ADDRESS_PATTERN, TX_HASH_PATTERN, AMOUNT_PATTERN regex
     - Define GENESIS_TIMESTAMPS for supported chains
     - Implement validate_address() method
     - _Requirements: 4.1_
-  - [ ]* 5.2 Write property test for address validation
+  - [ ]* 6.2 Write property test for address validation
     - **Property 5: Address Validation Correctness**
     - **Validates: Requirements 4.1**
-  - [ ] 5.3 Implement transaction hash validation
+  - [ ] 6.3 Implement transaction hash validation
     - Implement validate_tx_hash() method
     - _Requirements: 4.2_
-  - [ ]* 5.4 Write property test for transaction hash validation
+  - [ ]* 6.4 Write property test for transaction hash validation
     - **Property 6: Transaction Hash Validation Correctness**
     - **Validates: Requirements 4.2**
-  - [ ] 5.5 Implement amount validation with bounds checking
+  - [ ] 6.5 Implement amount validation with bounds checking
     - Implement validate_amount() with pattern and 2^256-1 bound
     - _Requirements: 4.3_
-  - [ ]* 5.6 Write property test for amount validation
+  - [ ]* 6.6 Write property test for amount validation
     - **Property 7: Amount Validation Correctness**
     - **Validates: Requirements 4.3**
-  - [ ] 5.7 Implement timestamp and block number validation
+  - [ ] 6.7 Implement timestamp and block number validation
     - Implement validate_timestamp() with genesis bounds
     - Implement validate_block_number() with future buffer
     - _Requirements: 4.6, 4.7_
-  - [ ] 5.8 Implement address normalization
+  - [ ] 6.8 Implement address normalization
     - Implement normalize_address() to lowercase
     - _Requirements: 4.5_
-  - [ ]* 5.9 Write property test for address normalization idempotence
+  - [ ]* 6.9 Write property test for address normalization idempotence
     - **Property 8: Address Normalization Idempotence**
     - **Validates: Requirements 4.5**
-  - [ ]* 5.10 Write unit tests for validation error handling
+  - [ ]* 6.10 Write unit tests for validation error handling
     - Test skip behavior on invalid records
     - Test warning logging with field name only
     - _Requirements: 4.4_
 
-- [ ] 6. Implement Safe File Path Handling
-  - [ ] 6.1 Implement SafePathHandler class in core/security/safe_path_handler.py
+- [ ] 7. Implement Safe File Path Handling
+  - [ ] 7.1 Implement SafePathHandler class in core/security/safe_path_handler.py
     - Define UNSAFE_CHARS regex pattern
     - Implement safe_join() with path containment check
     - Implement validate_path() method
     - _Requirements: 5.1, 5.2_
-  - [ ]* 6.2 Write property test for path containment
+  - [ ]* 7.2 Write property test for path containment
     - **Property 9: Path Containment**
     - **Validates: Requirements 5.1, 5.2**
-  - [ ] 6.3 Implement filename sanitization
+  - [ ] 7.3 Implement filename sanitization
     - Implement sanitize_filename() removing unsafe characters
     - _Requirements: 5.3_
-  - [ ]* 6.4 Write property test for filename sanitization safety
+  - [ ]* 7.4 Write property test for filename sanitization safety
     - **Property 10: Filename Sanitization Safety**
     - **Validates: Requirements 5.3**
-  - [ ] 6.5 Implement atomic file writing
+  - [ ] 7.5 Implement atomic file writing
     - Implement atomic_write() using temp file and rename
     - _Requirements: 5.5_
-  - [ ]* 6.6 Write unit tests for atomic write operations
+  - [ ]* 7.6 Write unit tests for atomic write operations
     - Test successful atomic write
     - Test rollback on failure
     - _Requirements: 5.5_
 
-- [ ] 7. Implement Collection Timeout Enforcement
-  - [ ] 7.1 Create TimeoutConfig model in config/models.py
+- [ ] 8. Implement Collection Timeout Enforcement
+  - [ ] 8.1 Create TimeoutConfig model in config/models.py
     - Add overall_run_timeout_seconds (default 1800)
     - Add per_collection_timeout_seconds (default 180)
     - Add shutdown_timeout_seconds (default 30)
     - Add model validator for timeout relationships
     - _Requirements: 6.4, 6.5_
-  - [ ] 7.2 Implement TimeoutManager class in core/security/timeout_manager.py
+  - [ ] 8.2 Implement TimeoutManager class in core/security/timeout_manager.py
     - Implement overall_timeout and per_collection_timeout properties
     - Implement time_remaining() and should_terminate() methods
     - Implement start() and run_with_timeout() methods
     - _Requirements: 6.1, 6.2, 6.3, 6.6_
-  - [ ]* 7.3 Write unit tests for timeout management
+  - [ ]* 8.3 Write unit tests for timeout management
     - Test timeout calculation with collection count
     - Test dynamic timeout adjustment
     - Test should_terminate() threshold
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
 
-- [ ] 8. Checkpoint - Ensure all medium priority tests pass
+- [ ] 9. Implement API Response Schema Validation
+  - [ ] 9.1 Create JSON schemas for explorer API responses in schemas/ directory
+    - Create schemas/etherscan/tokentx.json for token transfer responses
+    - Create schemas/etherscan/tokenholderlist.json for holder responses
+    - Create schemas/bscscan/ and schemas/polygonscan/ with equivalent schemas
+    - Define required fields, types, and max nesting depth (10 levels)
+    - _Requirements: 4.8, 4.10_
+  - [ ] 9.2 Implement ResponseSchemaValidator class in core/security/schema_validator.py
+    - Implement load_schemas() to load JSON schemas from directory
+    - Implement validate() method returning ValidationResult
+    - Implement _check_nesting_depth() method
+    - Implement get_schema_version() for logging
+    - _Requirements: 4.8, 4.9_
+  - [ ]* 9.3 Write property test for schema validation
+    - **Property 11: Schema Validation Rejects Invalid Structure**
+    - **Validates: Requirements 4.8, 4.9**
+  - [ ] 9.4 Integrate schema validation in collectors
+    - Add schema validation after receiving API responses
+    - Skip invalid responses and log warnings with field paths only
+    - Log schema version mismatches at WARNING level
+    - _Requirements: 4.9, 4.11_
+  - [ ]* 9.5 Write unit tests for schema validation
+    - Test valid response passes validation
+    - Test missing required field fails validation
+    - Test incorrect type fails validation
+    - Test excessive nesting depth fails validation
+    - Test error messages contain field paths, not raw values
+    - _Requirements: 4.8, 4.9_
+
+- [ ] 10. Checkpoint - Ensure all medium priority tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Integration Tasks
 
-- [ ] 9. Implement SecureHTTPClient
-  - [ ] 9.1 Create SecureHTTPClient class in core/security/secure_http_client.py
+- [ ] 11. Implement SecureHTTPClient
+  - [ ] 11.1 Create SecureHTTPClient class in core/security/secure_http_client.py
     - Define ALLOWED_PARAM_KEYS for explorer APIs
     - Implement _validate_params() method
     - Implement _sanitize_params_for_logging() method
     - _Requirements: 2.4, 2.5_
-  - [ ] 9.2 Implement get() method with all security validations
+  - [ ] 11.2 Implement get() method with all security validations
     - Integrate SSRFProtector for URL validation
     - Integrate ResourceLimiter for response size checking
     - Integrate CredentialSanitizer for logging
     - _Requirements: 1.1, 1.2, 2.4, 2.5, 3.1, 3.2_
-  - [ ] 9.3 Implement redirect handling with SSRF validation
+  - [ ] 11.3 Implement redirect handling with SSRF validation
     - Implement _handle_redirect() with rebinding check
     - _Requirements: 2.8, 2.9_
-  - [ ]* 9.4 Write integration tests for SecureHTTPClient
+  - [ ]* 11.4 Write integration tests for SecureHTTPClient
     - Test parameter validation and sanitization
     - Test SSRF protection integration
     - Test response size limiting
     - _Requirements: 1.1, 2.4, 2.5, 3.1_
 
-- [ ] 10. Integrate Security Components with Collectors
-  - [ ] 10.1 Update ExplorerCollector base class to use SecureHTTPClient
+- [ ] 12. Integrate Security Components with Collectors
+  - [ ] 12.1 Update ExplorerCollector base class to use SecureHTTPClient
     - Replace aiohttp session with SecureHTTPClient
     - Update _make_request() to use secure client
     - _Requirements: 1.1, 2.4, 3.1_
-  - [ ] 10.2 Integrate BlockchainDataValidator in collectors
+  - [ ] 12.2 Integrate BlockchainDataValidator in collectors
     - Add validation in _parse_transaction() methods
     - Add validation in _parse_holder() methods
     - Add address normalization
     - _Requirements: 4.1, 4.2, 4.3, 4.5_
-  - [ ] 10.3 Update orchestrator to use TimeoutManager and GracefulTerminator
+  - [ ] 12.3 Update orchestrator to use TimeoutManager and GracefulTerminator
     - Add timeout management to run() method
     - Add graceful termination on timeout
     - _Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6_
-  - [ ] 10.4 Update exporter to use SafePathHandler
+  - [ ] 12.4 Update exporter to use SafePathHandler
     - Replace direct file operations with SafePathHandler
     - Use atomic_write() for output files
     - _Requirements: 5.1, 5.2, 5.3, 5.5_
-  - [ ]* 10.5 Write integration tests for collector security
-    - Test end-to-end with security components
-    - Test graceful termination flow
+  - [ ]* 12.5 Write integration tests for collector security (test_integration.py)
+    - Test timeout behavior with GracefulTerminator persisting partial results
+    - Test error isolation (SSRFError in one collection doesn't suppress others)
+    - Test concurrent collections for race conditions in SSRFProtector._dns_cache
     - _Requirements: All_
+  - [ ]* 12.6 Write chaos/failure injection tests (test_chaos.py)
+    - Test DNS resolution failures with SSRFProtector
+    - Test cascade failures ensuring partial results persist
+    - Test resource exhaustion (near 10MB responses, memory spikes)
+    - Test circuit breaker trip and recovery scenarios
+    - _Requirements: 3.1, 3.2, 3.7, 3.8, 3.13, 3.14_
 
-- [ ] 11. Update Configuration Loading
-  - [ ] 11.1 Add SecurityConfig to main Config model
+- [ ] 13. Update Configuration Loading
+  - [ ] 13.1 Add SecurityConfig to main Config model
     - Add security field with SecurityConfig type
     - Update config.example.json with security section
     - _Requirements: 1.6, 1.7, 1.8, 1.9, 2.2, 2.3, 3.1, 6.4, 6.5_
-  - [ ] 11.2 Add environment variable overrides for security config
+  - [ ] 13.2 Add environment variable overrides for security config
     - Add ALLOWED_EXPLORER_DOMAINS env var support
     - Add MAX_RESPONSE_SIZE_BYTES env var support
     - Add OVERALL_RUN_TIMEOUT_SECONDS env var support
     - _Requirements: 2.2, 3.1, 6.4_
-  - [ ]* 11.3 Write unit tests for security configuration loading
+  - [ ]* 13.3 Write unit tests for security configuration loading
     - Test default values
     - Test environment variable overrides
     - Test validation errors
     - _Requirements: 1.9, 2.3, 6.5_
 
-- [ ] 12. Final Checkpoint - Ensure all tests pass
+- [ ] 14. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Optional Tasks (Lower Priority)
 
-- [ ]* 13. Implement Request Audit Trail
-  - [ ]* 13.1 Create RequestAuditLogger class
+- [ ]* 15. Implement Request Audit Trail
+  - [ ]* 15.1 Create RequestAuditLogger class
     - Log target domain, endpoint path, timestamp for each request
     - Log response status code and response time on completion
     - Exclude sensitive parameters from logs
     - Add correlation ID for request tracing
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
-  - [ ]* 13.2 Write unit tests for audit logging
+  - [ ]* 15.2 Write unit tests for audit logging
     - Test log entry format
     - Test credential exclusion
     - Test correlation ID propagation
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-- [ ]* 14. Implement Response Caching
-  - [ ]* 14.1 Create ResponseCache class
+- [ ]* 16. Implement Response Caching
+  - [ ]* 16.1 Create ResponseCache class
     - Implement TTL-based caching (default 5 minutes)
     - Implement LRU eviction when size limit exceeded
     - Implement cache hit/miss metrics
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
-  - [ ]* 14.2 Integrate caching with SecureHTTPClient
+  - [ ]* 16.2 Integrate caching with SecureHTTPClient
     - Check cache before making external requests
     - Store cacheable responses with TTL
     - _Requirements: 8.1, 8.2_
-  - [ ]* 14.3 Write unit tests for response caching
+  - [ ]* 16.3 Write unit tests for response caching
     - Test cache hit returns cached data
     - Test cache miss makes external request
     - Test TTL expiration
