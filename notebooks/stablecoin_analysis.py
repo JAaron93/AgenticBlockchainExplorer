@@ -1752,7 +1752,7 @@ def merge_data_sources(loaded_data, sample_data):
 def zenml_bridge_import():
     """Import ZenML bridge for pipeline control."""
     try:
-        from notebooks.zenml_bridge import (
+        from .zenml_bridge import (
             ZenMLNotebookBridge,
             PipelineInfo,
             PipelineRunStatus,
@@ -2060,6 +2060,884 @@ def pipeline_status_cell(mo, zenml_bridge, zenml_available, run_id):
     """)
     
     return
+
+
+# =============================================================================
+# Pipeline Artifact Visualization Layer (Task 15)
+# =============================================================================
+
+
+@app.cell
+def artifact_loading_state():
+    """State for artifact loading and refresh.
+    
+    Requirements: 14.1, 14.4
+    """
+    # Track loaded artifacts state
+    pipeline_artifacts = None
+    artifacts_loaded = False
+    artifacts_error = None
+    
+    return pipeline_artifacts, artifacts_loaded, artifacts_error
+
+
+@app.cell
+def artifact_refresh_ui(mo, zenml_available):
+    """Create refresh button for loading latest pipeline artifacts.
+    
+    Requirements: 14.1, 14.4
+    """
+    if not zenml_available:
+        return (None,)
+    
+    refresh_button = mo.ui.button(
+        label="🔄 Load Latest Pipeline Results",
+        kind="primary",
+    )
+    
+    # Pipeline selector for artifact loading
+    artifact_pipeline_selector = mo.ui.dropdown(
+        options=[
+            "stablecoin_master_pipeline",
+            "stablecoin_analysis_pipeline",
+        ],
+        value="stablecoin_master_pipeline",
+        label="Load artifacts from pipeline",
+    )
+    
+    return refresh_button, artifact_pipeline_selector
+
+
+@app.cell
+def load_pipeline_artifacts_cell(
+    mo,
+    zenml_bridge,
+    zenml_available,
+    refresh_button,
+    artifact_pipeline_selector,
+):
+    """Load latest pipeline artifacts via ZenML bridge.
+    
+    Requirements: 14.1, 14.4
+    Task: 15.1 Create artifact loading cells
+    """
+    pipeline_artifacts = None
+    artifacts_error = None
+    
+    if not zenml_available or zenml_bridge is None:
+        mo.md("""
+        ## 📊 Pipeline Results Visualization
+        
+        > ⚠️ ZenML is not available. Cannot load pipeline artifacts.
+        > Use the file selector above to load data from JSON exports instead.
+        """)
+        return pipeline_artifacts, artifacts_error
+    
+    if refresh_button is None:
+        return pipeline_artifacts, artifacts_error
+    
+    # Only load when button is clicked
+    if not refresh_button.value:
+        mo.md("""
+        ## 📊 Pipeline Results Visualization
+        
+        Click the button below to load the latest results from ZenML pipelines.
+        
+        This will load:
+        - Activity analysis results
+        - Holder metrics
+        - Time series data
+        - Chain metrics
+        - ML predictions (SoV and wallet classification)
+        """)
+        return pipeline_artifacts, artifacts_error
+    
+    # Get selected pipeline
+    pipeline_name = (
+        artifact_pipeline_selector.value 
+        if artifact_pipeline_selector 
+        else "stablecoin_master_pipeline"
+    )
+    
+    try:
+        pipeline_artifacts = zenml_bridge.load_latest_artifacts(pipeline_name)
+        
+        if pipeline_artifacts is None:
+            artifacts_error = f"No completed runs found for pipeline '{pipeline_name}'"
+            mo.md(f"""
+            ## 📊 Pipeline Results Visualization
+            
+            ⚠️ {artifacts_error}
+            
+            Run the pipeline first to generate results.
+            """)
+        else:
+            # Display run metadata
+            run_time = (
+                pipeline_artifacts.run_timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                if pipeline_artifacts.run_timestamp
+                else "Unknown"
+            )
+            artifact_count = len(pipeline_artifacts.artifacts)
+            is_mock = pipeline_artifacts.metadata.get("is_mock", False)
+            
+            mock_indicator = ""
+            if is_mock:
+                mock_indicator = "\n\n> ⚠️ **Note:** Displaying mock data. Connect to ZenML for real pipeline results."
+            
+            mo.md(f"""
+            ## 📊 Pipeline Results Visualization
+            
+            ✅ **Artifacts loaded successfully!**
+            
+            | Field | Value |
+            |-------|-------|
+            | **Run ID** | `{pipeline_artifacts.run_id}` |
+            | **Pipeline** | {pipeline_name} |
+            | **Run Time** | {run_time} |
+            | **Artifacts Loaded** | {artifact_count} |
+            {mock_indicator}
+            """)
+            
+    except Exception as e:
+        artifacts_error = str(e)
+        mo.md(f"""
+        ## 📊 Pipeline Results Visualization
+        
+        ❌ **Failed to load artifacts:** {artifacts_error}
+        """)
+    
+    return pipeline_artifacts, artifacts_error
+
+
+@app.cell
+def display_artifact_refresh_controls(
+    mo,
+    zenml_available,
+    refresh_button,
+    artifact_pipeline_selector,
+):
+    """Display the artifact loading controls.
+    
+    Requirements: 14.1, 14.4
+    """
+    if not zenml_available or refresh_button is None:
+        return
+    
+    mo.hstack([
+        artifact_pipeline_selector,
+        refresh_button,
+    ])
+    
+    return
+
+
+# =============================================================================
+# ML Prediction Visualization (Task 15.2)
+# =============================================================================
+
+
+@app.cell
+def ml_predictions_header(mo, pipeline_artifacts):
+    """Display ML predictions section header.
+    
+    Requirements: 12.5, 14.3
+    Task: 15.2 Create ML prediction visualization cells
+    """
+    if pipeline_artifacts is None:
+        return
+    
+    # Check if ML predictions are available
+    has_sov = "sov_predictions" in pipeline_artifacts.artifacts
+    has_wallet = "wallet_classifications" in pipeline_artifacts.artifacts
+    
+    if not has_sov and not has_wallet:
+        mo.md("""
+        ### ML Predictions
+        
+        > No ML prediction data available in the loaded artifacts.
+        > Run the master pipeline with ML inference to generate predictions.
+        """)
+        return
+    
+    mo.md("""
+    ### 🤖 ML Predictions
+    
+    Machine learning model predictions from the pipeline run.
+    """)
+    
+    return
+
+
+@app.cell
+def sov_prediction_data(pipeline_artifacts, pd):
+    """Extract SoV prediction data from artifacts.
+    
+    Requirements: 12.5, 14.3
+    """
+    sov_predictions_df = None
+    
+    if pipeline_artifacts is None:
+        return (sov_predictions_df,)
+    
+    sov_data = pipeline_artifacts.artifacts.get("sov_predictions")
+    
+    if sov_data is None:
+        return (sov_predictions_df,)
+    
+    # Handle different data formats
+    if isinstance(sov_data, pd.DataFrame):
+        sov_predictions_df = sov_data
+    elif isinstance(sov_data, dict):
+        # Convert dict to DataFrame
+        if "address" in sov_data and "sov_probability" in sov_data:
+            sov_predictions_df = pd.DataFrame(sov_data)
+        elif "predictions" in sov_data:
+            sov_predictions_df = pd.DataFrame(sov_data["predictions"])
+    
+    return (sov_predictions_df,)
+
+
+@app.cell
+def sov_prediction_distribution_chart(mo, alt, pd, sov_predictions_df):
+    """Create SoV prediction distribution chart.
+    
+    Requirements: 12.5, 14.3
+    Task: 15.2 Create ML prediction visualization cells
+    """
+    if sov_predictions_df is None or sov_predictions_df.empty:
+        return (None,)
+    
+    # Check for probability column
+    prob_col = None
+    for col in ["sov_probability", "probability", "score"]:
+        if col in sov_predictions_df.columns:
+            prob_col = col
+            break
+    
+    if prob_col is None:
+        return (None,)
+    
+    # Create histogram of SoV probabilities
+    sov_hist = alt.Chart(sov_predictions_df).mark_bar().encode(
+        x=alt.X(
+            f"{prob_col}:Q",
+            bin=alt.Bin(maxbins=20),
+            title="SoV Probability",
+        ),
+        y=alt.Y("count():Q", title="Number of Holders"),
+        color=alt.condition(
+            alt.datum[prob_col] >= 0.5,
+            alt.value("#F58518"),  # Orange for likely SoV
+            alt.value("#4C78A8"),  # Blue for likely active
+        ),
+        tooltip=[
+            alt.Tooltip(f"{prob_col}:Q", title="Probability", format=".2f"),
+            alt.Tooltip("count():Q", title="Count"),
+        ]
+    ).properties(
+        title="Store of Value Prediction Distribution",
+        width=500,
+        height=300,
+    )
+    
+    mo.md("#### SoV Prediction Distribution")
+    return (sov_hist,)
+
+
+@app.cell
+def display_sov_prediction_chart(mo, sov_predictions_df, sov_hist):
+    """Display the SoV prediction histogram."""
+    if sov_predictions_df is None or sov_hist is None:
+        return
+    
+    try:
+        return mo.ui.altair_chart(sov_hist)
+    except Exception:
+        return sov_hist
+
+
+@app.cell
+def sov_prediction_summary(mo, sov_predictions_df):
+    """Display SoV prediction summary statistics.
+    
+    Requirements: 12.5, 14.3
+    """
+    if sov_predictions_df is None or sov_predictions_df.empty:
+        return
+    
+    # Find probability column
+    prob_col = None
+    for col in ["sov_probability", "probability", "score"]:
+        if col in sov_predictions_df.columns:
+            prob_col = col
+            break
+    
+    if prob_col is None:
+        return
+    
+    total_holders = len(sov_predictions_df)
+    predicted_sov = (sov_predictions_df[prob_col] >= 0.5).sum()
+    predicted_active = total_holders - predicted_sov
+    avg_probability = sov_predictions_df[prob_col].mean()
+    
+    mo.md(f"""
+    #### SoV Prediction Summary
+    
+    | Metric | Value |
+    |--------|-------|
+    | **Total Holders Analyzed** | {total_holders:,} |
+    | **Predicted SoV (≥50%)** | {predicted_sov:,} ({predicted_sov/total_holders*100:.1f}%) |
+    | **Predicted Active (<50%)** | {predicted_active:,} ({predicted_active/total_holders*100:.1f}%) |
+    | **Average SoV Probability** | {avg_probability:.3f} |
+    """)
+    
+    return
+
+
+@app.cell
+def wallet_classification_data(pipeline_artifacts, pd):
+    """Extract wallet classification data from artifacts.
+    
+    Requirements: 12.5, 14.3
+    """
+    wallet_classifications_df = None
+    
+    if pipeline_artifacts is None:
+        return (wallet_classifications_df,)
+    
+    wallet_data = pipeline_artifacts.artifacts.get("wallet_classifications")
+    
+    if wallet_data is None:
+        return (wallet_classifications_df,)
+    
+    # Handle different data formats
+    if isinstance(wallet_data, pd.DataFrame):
+        wallet_classifications_df = wallet_data
+    elif isinstance(wallet_data, dict):
+        if "address" in wallet_data and "behavior_class" in wallet_data:
+            wallet_classifications_df = pd.DataFrame(wallet_data)
+        elif "classifications" in wallet_data:
+            wallet_classifications_df = pd.DataFrame(wallet_data["classifications"])
+    
+    return (wallet_classifications_df,)
+
+
+@app.cell
+def wallet_classification_chart(mo, alt, pd, wallet_classifications_df):
+    """Create wallet behavior classification breakdown chart.
+    
+    Requirements: 12.5, 14.3
+    Task: 15.2 Create ML prediction visualization cells
+    """
+    if wallet_classifications_df is None or wallet_classifications_df.empty:
+        return (None,)
+    
+    # Find class column
+    class_col = None
+    for col in ["behavior_class", "class", "classification", "wallet_class"]:
+        if col in wallet_classifications_df.columns:
+            class_col = col
+            break
+    
+    if class_col is None:
+        return (None,)
+    
+    # Calculate class distribution
+    class_counts = wallet_classifications_df[class_col].value_counts().reset_index()
+    class_counts.columns = ["behavior_class", "count"]
+    class_counts["percentage"] = class_counts["count"] / class_counts["count"].sum() * 100
+    
+    # Define colors for each class
+    class_colors = {
+        "trader": "#E45756",    # Red
+        "holder": "#4C78A8",    # Blue
+        "whale": "#F58518",     # Orange
+        "retail": "#72B7B2",    # Teal
+    }
+    
+    # Create bar chart
+    wallet_chart = alt.Chart(class_counts).mark_bar().encode(
+        x=alt.X(
+            "behavior_class:N",
+            title="Wallet Behavior Class",
+            sort=["trader", "holder", "whale", "retail"],
+        ),
+        y=alt.Y("count:Q", title="Number of Wallets"),
+        color=alt.Color(
+            "behavior_class:N",
+            scale=alt.Scale(
+                domain=list(class_colors.keys()),
+                range=list(class_colors.values()),
+            ),
+            legend=None,
+        ),
+        tooltip=[
+            alt.Tooltip("behavior_class:N", title="Class"),
+            alt.Tooltip("count:Q", title="Count", format=","),
+            alt.Tooltip("percentage:Q", title="Percentage", format=".1f"),
+        ]
+    ).properties(
+        title="Wallet Behavior Classification Distribution",
+        width=400,
+        height=300,
+    )
+    
+    mo.md("#### Wallet Behavior Classification")
+    return (wallet_chart,)
+
+
+@app.cell
+def display_wallet_classification_chart(mo, wallet_classifications_df, wallet_chart):
+    """Display the wallet classification chart."""
+    if wallet_classifications_df is None or wallet_chart is None:
+        return
+    
+    try:
+        return mo.ui.altair_chart(wallet_chart)
+    except Exception:
+        return wallet_chart
+
+
+@app.cell
+def wallet_classification_summary(mo, wallet_classifications_df):
+    """Display wallet classification summary with confidence.
+    
+    Requirements: 12.5, 14.3
+    """
+    if wallet_classifications_df is None or wallet_classifications_df.empty:
+        return
+    
+    # Find class and confidence columns
+    class_col = None
+    for col in ["behavior_class", "class", "classification", "wallet_class"]:
+        if col in wallet_classifications_df.columns:
+            class_col = col
+            break
+    
+    conf_col = None
+    for col in ["confidence", "probability", "score"]:
+        if col in wallet_classifications_df.columns:
+            conf_col = col
+            break
+    
+    if class_col is None:
+        return
+    
+    # Calculate statistics
+    total_wallets = len(wallet_classifications_df)
+    class_counts = wallet_classifications_df[class_col].value_counts()
+    
+    # Build class breakdown table
+    rows = []
+    for cls in ["trader", "holder", "whale", "retail"]:
+        count = class_counts.get(cls, 0)
+        pct = count / total_wallets * 100 if total_wallets > 0 else 0
+        rows.append(f"| {cls.title()} | {count:,} | {pct:.1f}% |")
+    
+    class_table = "\n".join(rows)
+    
+    # Confidence statistics
+    confidence_section = ""
+    if conf_col is not None:
+        avg_conf = wallet_classifications_df[conf_col].mean()
+        low_conf_count = (wallet_classifications_df[conf_col] < 0.6).sum()
+        confidence_section = f"""
+    
+    #### Classification Confidence
+    
+    | Metric | Value |
+    |--------|-------|
+    | **Average Confidence** | {avg_conf:.3f} |
+    | **Low Confidence (<0.6)** | {low_conf_count:,} ({low_conf_count/total_wallets*100:.1f}%) |
+    """
+    
+    mo.md(f"""
+    #### Wallet Classification Summary
+    
+    | Class | Count | Percentage |
+    |-------|-------|------------|
+    {class_table}
+    | **Total** | **{total_wallets:,}** | **100.0%** |
+    {confidence_section}
+    """)
+    
+    return
+
+
+@app.cell
+def behavior_class_filter_ui(mo, wallet_classifications_df):
+    """Create filter UI for filtering analysis by behavior class.
+    
+    Requirements: 12.5, 14.3
+    Task: 15.2 Create ML prediction visualization cells
+    """
+    if wallet_classifications_df is None or wallet_classifications_df.empty:
+        return (None,)
+    
+    # Find class column
+    class_col = None
+    for col in ["behavior_class", "class", "classification", "wallet_class"]:
+        if col in wallet_classifications_df.columns:
+            class_col = col
+            break
+    
+    if class_col is None:
+        return (None,)
+    
+    # Get unique classes
+    classes = wallet_classifications_df[class_col].unique().tolist()
+    
+    # Create multiselect filter
+    behavior_filter = mo.ui.multiselect(
+        options=classes,
+        value=classes,  # All selected by default
+        label="Filter by Behavior Class",
+    )
+    
+    mo.md(f"""
+    #### Filter Analysis by Wallet Behavior
+    
+    Select wallet behavior classes to include in the analysis:
+    
+    {behavior_filter}
+    """)
+    
+    return (behavior_filter,)
+
+
+# =============================================================================
+# Model Comparison UI (Task 15.3)
+# =============================================================================
+
+
+@app.cell
+def model_comparison_header(mo, zenml_available):
+    """Display model comparison section header.
+    
+    Requirements: 15.1, 15.2, 15.3
+    Task: 15.3 Create model comparison UI
+    """
+    if not zenml_available:
+        return
+    
+    mo.md("""
+    ### 📈 Model Version Comparison
+    
+    Compare ML model versions and their performance metrics.
+    """)
+    
+    return
+
+
+@app.cell
+def model_selector_ui(mo, zenml_available):
+    """Create model selector for version comparison.
+    
+    Requirements: 15.1, 15.2, 15.3
+    """
+    if not zenml_available:
+        return (None,)
+    
+    model_selector = mo.ui.dropdown(
+        options=[
+            "sov_predictor",
+            "wallet_classifier",
+        ],
+        value="sov_predictor",
+        label="Select Model",
+    )
+    
+    return (model_selector,)
+
+
+@app.cell
+def load_model_versions_cell(mo, zenml_bridge, zenml_available, model_selector):
+    """Load model versions from ZenML registry.
+    
+    Requirements: 15.1, 15.2, 15.3
+    Task: 15.3 Create model comparison UI
+    """
+    model_versions = []
+    
+    if not zenml_available or zenml_bridge is None or model_selector is None:
+        return (model_versions,)
+    
+    model_name = model_selector.value
+    
+    try:
+        model_versions = zenml_bridge.get_model_versions(model_name)
+    except Exception as e:
+        mo.md(f"""
+        ⚠️ Failed to load model versions: {e}
+        """)
+    
+    return (model_versions,)
+
+
+@app.cell
+def model_versions_table(mo, zenml_available, model_selector, model_versions):
+    """Display table of model versions with metrics.
+    
+    Requirements: 15.1, 15.2, 15.3
+    Task: 15.3 Create model comparison UI
+    """
+    if not zenml_available or model_selector is None:
+        return
+    
+    model_name = model_selector.value
+    
+    if not model_versions:
+        # Show mock data for demonstration
+        mo.md(f"""
+        #### Model Versions: {model_name}
+        
+        | Version | Created | Precision | Recall | F1 | AUC | Status |
+        |---------|---------|-----------|--------|-----|-----|--------|
+        | v3 | 2024-12-10 | 0.85 | 0.82 | 0.83 | 0.91 | 🟢 Production |
+        | v2 | 2024-12-03 | 0.83 | 0.80 | 0.81 | 0.89 | ⚪ Archived |
+        | v1 | 2024-11-26 | 0.78 | 0.75 | 0.76 | 0.85 | ⚪ Archived |
+        
+        > ℹ️ Showing mock data. Connect to ZenML to see actual model versions.
+        """)
+        return
+    
+    # Build table rows
+    rows = []
+    for v in model_versions:
+        metrics = v.get("metrics", {})
+        precision = metrics.get("precision", "N/A")
+        recall = metrics.get("recall", "N/A")
+        f1 = metrics.get("f1", "N/A")
+        auc = metrics.get("auc", "N/A")
+        
+        # Format metrics
+        if isinstance(precision, (int, float)):
+            precision = f"{precision:.2f}"
+        if isinstance(recall, (int, float)):
+            recall = f"{recall:.2f}"
+        if isinstance(f1, (int, float)):
+            f1 = f"{f1:.2f}"
+        if isinstance(auc, (int, float)):
+            auc = f"{auc:.2f}"
+        
+        # Status indicator
+        is_prod = v.get("is_production", False)
+        status = "🟢 Production" if is_prod else "⚪ Archived"
+        
+        created = v.get("created", "N/A")
+        if created and created != "N/A":
+            created = created[:10]  # Just the date part
+        
+        rows.append(
+            f"| {v.get('version', 'N/A')} | {created} | "
+            f"{precision} | {recall} | {f1} | {auc} | {status} |"
+        )
+    
+    table_rows = "\n".join(rows)
+    
+    mo.md(f"""
+    #### Model Versions: {model_name}
+    
+    | Version | Created | Precision | Recall | F1 | AUC | Status |
+    |---------|---------|-----------|--------|-----|-----|--------|
+    {table_rows}
+    """)
+    
+    return
+
+
+@app.cell
+def model_promotion_ui(mo, zenml_available, model_versions):
+    """Create model promotion controls.
+    
+    Requirements: 15.1, 15.2, 15.3
+    Task: 15.3 Create model comparison UI
+    """
+    if not zenml_available:
+        return (None, None)
+    
+    # Get non-production versions for promotion
+    promotable_versions = []
+    if model_versions:
+        promotable_versions = [
+            v.get("version") 
+            for v in model_versions 
+            if not v.get("is_production", False) and v.get("version")
+        ]
+    
+    if not promotable_versions:
+        # Use mock versions for demonstration
+        promotable_versions = ["v2", "v1"]
+    
+    version_selector = mo.ui.dropdown(
+        options=promotable_versions,
+        value=promotable_versions[0] if promotable_versions else None,
+        label="Select Version to Promote",
+    )
+    
+    promote_button = mo.ui.button(
+        label="⬆️ Promote to Production",
+        kind="warn",
+    )
+    
+    return version_selector, promote_button
+
+
+@app.cell
+def display_promotion_controls(
+    mo,
+    zenml_available,
+    version_selector,
+    promote_button,
+):
+    """Display the model promotion controls."""
+    if not zenml_available or version_selector is None:
+        return
+    
+    mo.md("""
+    #### Promote Model Version
+    
+    Select a model version to promote to production:
+    """)
+    
+    mo.hstack([
+        version_selector,
+        promote_button,
+    ])
+    
+    return
+
+
+@app.cell
+def handle_model_promotion(
+    mo,
+    zenml_bridge,
+    zenml_available,
+    model_selector,
+    version_selector,
+    promote_button,
+):
+    """Handle model promotion action.
+    
+    Requirements: 15.3
+    """
+    if not zenml_available or zenml_bridge is None:
+        return
+    
+    if promote_button is None or not promote_button.value:
+        return
+    
+    if version_selector is None or version_selector.value is None:
+        mo.md("⚠️ Please select a version to promote.")
+        return
+    
+    model_name = model_selector.value if model_selector else "sov_predictor"
+    version = version_selector.value
+    
+    try:
+        success = zenml_bridge.promote_model(model_name, version)
+        
+        if success:
+            mo.md(f"""
+            ✅ **Model promoted successfully!**
+            
+            Model `{model_name}` version `{version}` is now the production model.
+            
+            Refresh the page to see updated model status.
+            """)
+        else:
+            mo.md(f"""
+            ❌ **Failed to promote model.**
+            
+            Could not promote `{model_name}` version `{version}`.
+            """)
+            
+    except Exception as e:
+        mo.md(f"""
+        ❌ **Error promoting model:** {e}
+        """)
+    
+    return
+
+
+@app.cell
+def model_metrics_trend_chart(mo, alt, pd, model_versions):
+    """Create model metrics trend chart.
+    
+    Requirements: 15.2
+    Task: 15.3 Create model comparison UI
+    """
+    if not model_versions:
+        # Use mock data for demonstration
+        mock_data = [
+            {"version": "v1", "f1": 0.76, "auc": 0.85},
+            {"version": "v2", "f1": 0.81, "auc": 0.89},
+            {"version": "v3", "f1": 0.83, "auc": 0.91},
+        ]
+        chart_df = pd.DataFrame(mock_data)
+    else:
+        # Extract metrics from versions
+        chart_data = []
+        for v in model_versions:
+            metrics = v.get("metrics", {})
+            if metrics:
+                chart_data.append({
+                    "version": v.get("version", "unknown"),
+                    "f1": metrics.get("f1", 0),
+                    "auc": metrics.get("auc", 0),
+                })
+        
+        if not chart_data:
+            return (None,)
+        
+        chart_df = pd.DataFrame(chart_data)
+    
+    # Melt for multi-line chart
+    chart_df_melted = chart_df.melt(
+        id_vars=["version"],
+        value_vars=["f1", "auc"],
+        var_name="metric",
+        value_name="value",
+    )
+    
+    # Create line chart
+    metrics_chart = alt.Chart(chart_df_melted).mark_line(point=True).encode(
+        x=alt.X("version:N", title="Model Version"),
+        y=alt.Y("value:Q", title="Score", scale=alt.Scale(domain=[0, 1])),
+        color=alt.Color(
+            "metric:N",
+            scale=alt.Scale(
+                domain=["f1", "auc"],
+                range=["#4C78A8", "#F58518"],
+            ),
+            legend=alt.Legend(title="Metric"),
+        ),
+        tooltip=[
+            alt.Tooltip("version:N", title="Version"),
+            alt.Tooltip("metric:N", title="Metric"),
+            alt.Tooltip("value:Q", title="Score", format=".3f"),
+        ]
+    ).properties(
+        title="Model Performance Trend",
+        width=400,
+        height=250,
+    )
+    
+    mo.md("#### Model Performance Trend")
+    return (metrics_chart,)
+
+
+@app.cell
+def display_metrics_trend_chart(mo, metrics_chart):
+    """Display the model metrics trend chart."""
+    if metrics_chart is None:
+        return
+    
+    try:
+        return mo.ui.altair_chart(metrics_chart)
+    except Exception:
+        return metrics_chart
 
 
 # =============================================================================

@@ -346,6 +346,10 @@ def run_weekly_master_pipeline(
     stablecoins: List[str] = ["USDC", "USDT"],
     date_range_days: int = 7,
     max_records: int = 1000,
+    min_successful_collectors: int = 2,
+    aggregation: str = "daily",
+    top_n_holders: int = 10,
+    run_ml_inference: bool = True,
     cron_expression: str = "0 0 * * 0",
 ):
     """Run the master pipeline with weekly scheduling.
@@ -356,6 +360,10 @@ def run_weekly_master_pipeline(
         stablecoins: List of stablecoin symbols to collect
         date_range_days: Number of days of historical data
         max_records: Maximum records per stablecoin per collector
+        min_successful_collectors: Minimum successful collectors required
+        aggregation: Time series aggregation period (daily/weekly/monthly)
+        top_n_holders: Number of top holders to include in analysis
+        run_ml_inference: Whether to run ML inference steps
         cron_expression: Cron expression for scheduling
             Default: "0 0 * * 0" (every Sunday at midnight UTC)
             
@@ -370,5 +378,9 @@ def run_weekly_master_pipeline(
         stablecoins=stablecoins,
         date_range_days=date_range_days,
         max_records=max_records,
+        min_successful_collectors=min_successful_collectors,
+        aggregation=aggregation,
+        top_n_holders=top_n_holders,
+        run_ml_inference=run_ml_inference,
         schedule=schedule,
     )
