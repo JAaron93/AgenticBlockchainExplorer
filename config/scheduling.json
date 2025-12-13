@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Scheduling configuration for stablecoin analysis pipelines",
+  "schedules": {
+    "master_pipeline": {
+      "enabled": true,
+      "cron_expression": "0 0 * * 0",
+      "description": "Run master pipeline every Sunday at midnight UTC",
+      "timezone": "UTC",
+      "parameters": {
+        "stablecoins": ["USDC", "USDT"],
+        "date_range_days": 7,
+        "max_records": 1000,
+        "min_successful_collectors": 2,
+        "aggregation": "daily",
+        "top_n_holders": 10,
+        "run_ml_inference": true
+      },
+      "notifications": {
+        "on_success": false,
+        "on_failure": true,
+        "channels": ["email", "slack"]
+      },
+      "retry": {
+        "max_attempts": 3,
+        "delay_minutes": 30
+      }
+    },
+    "collection_pipeline": {
+      "enabled": false,
+      "cron_expression": "0 */6 * * *",
+      "description": "Run collection pipeline every 6 hours (disabled by default)",
+      "timezone": "UTC",
+      "parameters": {
+        "stablecoins": ["USDC", "USDT"],
+        "date_range_days": 1,
+        "max_records": 500
+      }
+    },
+    "analysis_pipeline": {
+      "enabled": false,
+      "cron_expression": "0 1 * * *",
+      "description": "Run analysis pipeline daily at 1 AM UTC (disabled by default)",
+      "timezone": "UTC",
+      "parameters": {
+        "aggregation": "daily",
+        "top_n_holders": 10
+      }
+    }
+  },
+  "global_settings": {
+    "max_concurrent_runs": 1,
+    "run_timeout_hours": 4,
+    "artifact_retention_days": 90,
+    "log_level": "INFO"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "ML model performance thresholds for degradation detection",
+  "thresholds": {
+    "sov_predictor": {
+      "precision_min": 0.70,
+      "recall_min": 0.65,
+      "f1_min": 0.67,
+      "auc_min": 0.75,
+      "relative_drop_max": 0.10
+    },
+    "wallet_classifier": {
+      "precision_min": 0.70,
+      "recall_min": 0.65,
+      "f1_min": 0.67,
+      "auc_min": 0.75,
+      "relative_drop_max": 0.10
+    }
+  },
+  "alerts": {
+    "enabled": true,
+    "channels": {
+      "email": {
+        "enabled": false,
+        "recipients": []
+      },
+      "slack": {
+        "enabled": false,
+        "webhook_url": ""
+      },
+      "log_only": {
+        "enabled": true
+      }
+    }
+  },
+  "auto_promotion": {
+    "enabled": false,
+    "require_all_thresholds": true,
+    "require_improvement_over_production": true
+  }
+}

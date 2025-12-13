@@ -272,21 +272,21 @@
     - Add model promotion controls
     - _Requirements: 15.1, 15.2, 15.3_
 
-- [ ] 16. Implement web export and scheduling
-  - [ ] 16.1 Create static export functionality
+- [x] 16. Implement web export and scheduling
+  - [x] 16.1 Create static export functionality
     - Generate static HTML/JSON outputs from notebook
     - Export visualizations as embeddable components
     - _Requirements: 14.5_
-  - [ ] 16.2 Configure weekly scheduling
+  - [x] 16.2 Configure weekly scheduling
     - Document cron job setup for master pipeline
     - Create scheduling configuration file
     - _Requirements: 10.5_
-  - [ ] 16.3 Add model performance monitoring
+  - [x] 16.3 Add model performance monitoring
     - Implement metric threshold checking
     - Flag runs with degraded performance
     - _Requirements: 15.4, 15.5_
 
-- [ ] 17. Checkpoint - Ensure all tests pass
+- [x] 17. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 18. Integration and documentation

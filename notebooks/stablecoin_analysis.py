@@ -2088,7 +2088,7 @@ def artifact_refresh_ui(mo, zenml_available):
     Requirements: 14.1, 14.4
     """
     if not zenml_available:
-        return (None,)
+        return (None, None)
     
     refresh_button = mo.ui.button(
         label="🔄 Load Latest Pipeline Results",
@@ -2327,7 +2327,7 @@ def sov_prediction_distribution_chart(mo, alt, pd, sov_predictions_df):
         ),
         y=alt.Y("count():Q", title="Number of Holders"),
         color=alt.condition(
-            alt.datum[prob_col] >= 0.5,
+            f"tum.{.{rob_col}}>= 0.5"",
             alt.value("#F58518"),  # Orange for likely SoV
             alt.value("#4C78A8"),  # Blue for likely active
         ),
