@@ -619,3 +619,345 @@ class TestAggregationPreservesRecords:
         assert "polygonscan" in result.failed_sources
         assert len(result.successful_sources) == 2
         assert len(result.failed_sources) == 1
+
+
+class TestPipelineArtifactVersioning:
+    """Tests for pipeline artifact versioning (Property 15)."""
+
+    @settings(max_examples=100, deadline=None)
+    @given(transactions=st.lists(valid_transaction_model(), min_size=1, max_size=20))
+    def test_property_15_activity_analysis_output_is_serializable(
+        self, transactions
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 15: Pipeline artifact versioning**
+
+        For any activity analysis step execution, the output artifact SHALL be
+        serializable and contain all required fields for versioned storage.
+
+        **Validates: Requirements 10.2**
+        """
+        from pipelines.steps.analysis import (
+            activity_analysis_step,
+            ActivityAnalysisOutput,
+        )
+        from notebooks.stablecoin_analysis_functions import ACTIVITY_TYPES
+        
+        # Set consistent chain for transactions
+        for tx in transactions:
+            object.__setattr__(tx, 'chain', 'ethereum')
+        
+        # Convert to DataFrame
+        df = transactions_to_dataframe(transactions)
+        
+        # Run the analysis step
+        result = activity_analysis_step.entrypoint(transactions_df=df)
+        
+        # Verify output type
+        assert isinstance(result, ActivityAnalysisOutput), (
+            f"Expected ActivityAnalysisOutput, got {type(result)}"
+        )
+        
+        # Verify all activity types are present in output
+        for at in ACTIVITY_TYPES:
+            assert at in result.counts, (
+                f"Activity type '{at}' missing from counts"
+            )
+            assert at in result.percentages, (
+                f"Activity type '{at}' missing from percentages"
+            )
+            assert at in result.volumes, (
+                f"Activity type '{at}' missing from volumes"
+            )
+            assert at in result.volume_percentages, (
+                f"Activity type '{at}' missing from volume_percentages"
+            )
+        
+        # Verify output is serializable to dict
+        output_dict = result.to_dict()
+        assert isinstance(output_dict, dict), (
+            f"to_dict() should return dict, got {type(output_dict)}"
+        )
+        
+        # Verify dict contains all required keys
+        required_keys = ["counts", "percentages", "volumes", "volume_percentages"]
+        for key in required_keys:
+            assert key in output_dict, (
+                f"Required key '{key}' missing from serialized output"
+            )
+        
+        # Verify counts sum equals transaction count
+        total_count = sum(result.counts.values())
+        assert total_count == len(transactions), (
+            f"Total count ({total_count}) != transaction count ({len(transactions)})"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(holders=st.lists(valid_holder_model(), min_size=1, max_size=20))
+    def test_property_15_holder_analysis_output_is_serializable(self, holders):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 15: Pipeline artifact versioning**
+
+        For any holder analysis step execution, the output artifact SHALL be
+        serializable and contain all required fields for versioned storage.
+
+        **Validates: Requirements 10.2**
+        """
+        from pipelines.steps.analysis import (
+            holder_analysis_step,
+            HolderAnalysisOutput,
+        )
+        
+        # Set consistent chain for holders
+        for h in holders:
+            object.__setattr__(h, 'chain', 'ethereum')
+        
+        # Convert to DataFrames
+        holders_df = holders_to_dataframe(holders)
+        transactions_df = transactions_to_dataframe([])  # Empty transactions
+        
+        # Run the analysis step
+        result = holder_analysis_step.entrypoint(
+            holders_df=holders_df,
+            transactions_df=transactions_df,
+            top_n=10,
+        )
+        
+        # Verify output type
+        assert isinstance(result, HolderAnalysisOutput), (
+            f"Expected HolderAnalysisOutput, got {type(result)}"
+        )
+        
+        # Verify total holders matches input
+        assert result.total_holders == len(holders), (
+            f"Total holders ({result.total_holders}) != input count ({len(holders)})"
+        )
+        
+        # Verify SoV count is valid
+        assert 0 <= result.sov_count <= result.total_holders, (
+            f"SoV count ({result.sov_count}) out of valid range"
+        )
+        
+        # Verify output is serializable to dict
+        output_dict = result.to_dict()
+        assert isinstance(output_dict, dict), (
+            f"to_dict() should return dict, got {type(output_dict)}"
+        )
+        
+        # Verify dict contains all required keys
+        required_keys = [
+            "total_holders", "sov_count", "sov_percentage",
+            "avg_balance_sov", "avg_balance_active",
+            "avg_holding_period_days", "median_holding_period_days",
+            "top_holders"
+        ]
+        for key in required_keys:
+            assert key in output_dict, (
+                f"Required key '{key}' missing from serialized output"
+            )
+        
+        # Verify top_holders is a list
+        assert isinstance(output_dict["top_holders"], list), (
+            f"top_holders should be list, got {type(output_dict['top_holders'])}"
+        )
+
+    @settings(max_examples=100, deadline=None)
+    @given(transactions=st.lists(valid_transaction_model(), min_size=1, max_size=20))
+    def test_property_15_time_series_output_is_dataframe(self, transactions):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 15: Pipeline artifact versioning**
+
+        For any time series step execution, the output artifact SHALL be
+        a valid pandas DataFrame suitable for versioned storage.
+
+        **Validates: Requirements 10.2**
+        """
+        from pipelines.steps.analysis import time_series_step
+        
+        # Set consistent chain for transactions
+        for tx in transactions:
+            object.__setattr__(tx, 'chain', 'ethereum')
+        
+        # Convert to DataFrame
+        df = transactions_to_dataframe(transactions)
+        
+        # Run the analysis step
+        result = time_series_step.entrypoint(
+            transactions_df=df,
+            aggregation="daily",
+        )
+        
+        # Verify output type
+        assert isinstance(result, pd.DataFrame), (
+            f"Expected pandas DataFrame, got {type(result)}"
+        )
+        
+        # Verify required columns are present
+        required_columns = [
+            "period", "activity_type", "stablecoin",
+            "transaction_count", "volume"
+        ]
+        for col in required_columns:
+            assert col in result.columns, (
+                f"Required column '{col}' missing from time series output"
+            )
+        
+        # Verify aggregated counts sum to original count
+        if len(result) > 0:
+            total_aggregated = result["transaction_count"].sum()
+            assert total_aggregated == len(transactions), (
+                f"Aggregated count ({total_aggregated}) != "
+                f"original count ({len(transactions)})"
+            )
+
+    @settings(max_examples=100, deadline=None)
+    @given(transactions=st.lists(valid_transaction_model(), min_size=1, max_size=20))
+    def test_property_15_chain_analysis_output_is_serializable(self, transactions):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 15: Pipeline artifact versioning**
+
+        For any chain analysis step execution, the output artifact SHALL be
+        serializable and contain metrics for all supported chains.
+
+        **Validates: Requirements 10.2**
+        """
+        from pipelines.steps.analysis import (
+            chain_analysis_step,
+            ChainAnalysisOutput,
+        )
+        from notebooks.stablecoin_analysis_functions import SUPPORTED_CHAINS
+        
+        # Distribute transactions across chains
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+        
+        # Convert to DataFrame
+        df = transactions_to_dataframe(transactions)
+        
+        # Run the analysis step
+        result = chain_analysis_step.entrypoint(
+            transactions_df=df,
+            holders_df=None,
+        )
+        
+        # Verify output type
+        assert isinstance(result, ChainAnalysisOutput), (
+            f"Expected ChainAnalysisOutput, got {type(result)}"
+        )
+        
+        # Verify output is serializable to dict
+        output_dict = result.to_dict()
+        assert isinstance(output_dict, dict), (
+            f"to_dict() should return dict, got {type(output_dict)}"
+        )
+        
+        # Verify chain_metrics is present and is a list
+        assert "chain_metrics" in output_dict, (
+            "chain_metrics key missing from serialized output"
+        )
+        assert isinstance(output_dict["chain_metrics"], list), (
+            f"chain_metrics should be list, got {type(output_dict['chain_metrics'])}"
+        )
+        
+        # Verify all supported chains are present
+        chains_in_output = {m["chain"] for m in output_dict["chain_metrics"]}
+        for chain in SUPPORTED_CHAINS:
+            assert chain in chains_in_output, (
+                f"Chain '{chain}' missing from chain metrics output"
+            )
+        
+        # Verify each chain metric has required fields
+        required_fields = [
+            "chain", "transaction_count", "total_volume",
+            "avg_transaction_size", "sov_ratio", "activity_distribution"
+        ]
+        for metric in output_dict["chain_metrics"]:
+            for field in required_fields:
+                assert field in metric, (
+                    f"Required field '{field}' missing from chain metric"
+                )
+
+    @settings(max_examples=50, deadline=None)
+    @given(
+        transactions=st.lists(valid_transaction_model(), min_size=5, max_size=15),
+        holders=st.lists(valid_holder_model(), min_size=3, max_size=10),
+    )
+    def test_property_15_all_analysis_outputs_are_versioned_artifacts(
+        self, transactions, holders
+    ):
+        """
+        **Feature: stablecoin-analysis-notebook, Property 15: Pipeline artifact versioning**
+
+        For any completed analysis pipeline run, all output artifacts SHALL be
+        retrievable and contain consistent data across all analysis steps.
+
+        **Validates: Requirements 10.2**
+        """
+        from pipelines.steps.analysis import (
+            activity_analysis_step,
+            holder_analysis_step,
+            time_series_step,
+            chain_analysis_step,
+        )
+        
+        # Distribute data across chains
+        for i, tx in enumerate(transactions):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(tx, 'chain', chain)
+        for i, h in enumerate(holders):
+            chain = CHAINS[i % len(CHAINS)]
+            object.__setattr__(h, 'chain', chain)
+        
+        # Convert to DataFrames
+        transactions_df = transactions_to_dataframe(transactions)
+        holders_df = holders_to_dataframe(holders)
+        
+        # Run all analysis steps
+        activity_output = activity_analysis_step.entrypoint(
+            transactions_df=transactions_df
+        )
+        holder_output = holder_analysis_step.entrypoint(
+            holders_df=holders_df,
+            transactions_df=transactions_df,
+            top_n=10,
+        )
+        time_series_output = time_series_step.entrypoint(
+            transactions_df=transactions_df,
+            aggregation="daily",
+        )
+        chain_output = chain_analysis_step.entrypoint(
+            transactions_df=transactions_df,
+            holders_df=holders_df,
+        )
+        
+        # Verify all outputs are serializable
+        activity_dict = activity_output.to_dict()
+        holder_dict = holder_output.to_dict()
+        chain_dict = chain_output.to_dict()
+        
+        # Verify consistency: total counts should match
+        activity_total = sum(activity_output.counts.values())
+        assert activity_total == len(transactions), (
+            f"Activity total ({activity_total}) != transaction count ({len(transactions)})"
+        )
+        
+        holder_total = holder_output.total_holders
+        assert holder_total == len(holders), (
+            f"Holder total ({holder_total}) != holder count ({len(holders)})"
+        )
+        
+        # Verify time series aggregation preserves total
+        if len(time_series_output) > 0:
+            ts_total = time_series_output["transaction_count"].sum()
+            assert ts_total == len(transactions), (
+                f"Time series total ({ts_total}) != transaction count ({len(transactions)})"
+            )
+        
+        # Verify chain metrics cover all transactions
+        chain_total = sum(
+            m["transaction_count"] for m in chain_dict["chain_metrics"]
+        )
+        assert chain_total == len(transactions), (
+            f"Chain total ({chain_total}) != transaction count ({len(transactions)})"
+        )

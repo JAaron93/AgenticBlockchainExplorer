@@ -726,21 +726,7 @@ def aggregate_data_step(
         logger.error(error_msg)
         raise ValueError(error_msg)
     
-    # Convert DataFrames back to model objects for aggregation
-    all_transactions: list[Transaction] = []
-    all_holders: list[Holder] = []
-    
-    for name, output in collector_outputs:
-        if output.success:
-            # Convert DataFrames to model objects
-            transactions = dataframe_to_transactions(output.transactions_df)
-            holders = dataframe_to_holders(output.holders_df)
-            all_transactions.extend(transactions)
-            all_holders.extend(holders)
-            
-            logger.debug(
-                f"Added {len(transactions)} transactions and {len(holders)} holders from {name}"
-            )
+
     
     # Use existing DataAggregator for deduplication and merging
     aggregator = DataAggregator()

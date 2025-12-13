@@ -167,25 +167,25 @@
     - **Property 14: Aggregation preserves records**
     - **Validates: Requirements 9.3**
 
-- [ ] 11. Create ZenML analysis pipeline
-  - [ ] 11.1 Convert analysis functions to ZenML steps
+- [x] 11. Create ZenML analysis pipeline
+  - [x] 11.1 Convert analysis functions to ZenML steps
     - Create `pipelines/steps/analysis.py`
     - Wrap `analyze_activity_types` as `activity_analysis_step`
     - Wrap `analyze_holders` as `holder_analysis_step`
     - Wrap `analyze_time_series` as `time_series_step`
     - Wrap `analyze_by_chain` as `chain_analysis_step`
     - _Requirements: 10.1, 10.2_
-  - [ ] 11.2 Create data collection pipeline
+  - [x] 11.2 Create data collection pipeline
     - Create `pipelines/collection_pipeline.py`
     - Chain collector steps with aggregation step
     - Support parameterization for stablecoins and date range
     - _Requirements: 10.3_
-  - [ ] 11.3 Create analysis pipeline
+  - [x] 11.3 Create analysis pipeline
     - Create `pipelines/analysis_pipeline.py`
     - Chain all analysis steps
     - Output analysis results as versioned artifacts
     - _Requirements: 10.2, 10.4_
-  - [ ] 11.4 Write property test for pipeline artifact versioning
+  - [x] 11.4 Write property test for pipeline artifact versioning
     - **Property 15: Pipeline artifact versioning**
     - **Validates: Requirements 10.2**
 
