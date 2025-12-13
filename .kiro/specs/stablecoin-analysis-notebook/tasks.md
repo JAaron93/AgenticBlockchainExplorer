@@ -141,29 +141,29 @@
   - All 13 property tests pass (Properties 1-12 plus small sample size warning test)
   - Full test suite: 125 passed, 1 skipped
 
-- [ ] 10. Set up ZenML infrastructure and collector steps
-  - [ ] 10.1 Add ZenML dependencies and initialize project
+- [x] 10. Set up ZenML infrastructure and collector steps
+  - [x] 10.1 Add ZenML dependencies and initialize project
     - Add zenml, scikit-learn, xgboost to requirements.txt
     - Run `zenml init` to initialize ZenML in the project
     - Configure ZenML stack (local orchestrator, artifact store)
     - _Requirements: 9.1, 10.1_
-  - [ ] 10.2 Wrap Etherscan collector as ZenML step
+  - [x] 10.2 Wrap Etherscan collector as ZenML step
     - Create `pipelines/steps/collectors.py`
     - Implement `etherscan_collector_step` with typed outputs
     - Handle API errors and return partial results
     - _Requirements: 9.1, 9.2, 9.4_
-  - [ ] 10.3 Wrap BscScan and Polygonscan collectors as ZenML steps
+  - [x] 10.3 Wrap BscScan and Polygonscan collectors as ZenML steps
     - Implement `bscscan_collector_step`
     - Implement `polygonscan_collector_step`
     - _Requirements: 9.1, 9.2_
-  - [ ] 10.4 Create aggregation step
+  - [x] 10.4 Create aggregation step
     - Implement `aggregate_data_step` to merge and deduplicate
     - Output versioned artifact with transactions and holders
     - _Requirements: 9.3, 9.5_
-  - [ ] 10.5 Write property test for ZenML step output typing
+  - [x] 10.5 Write property test for ZenML step output typing
     - **Property 13: ZenML step output typing**
     - **Validates: Requirements 9.1, 9.2**
-  - [ ] 10.6 Write property test for aggregation preserves records
+  - [x] 10.6 Write property test for aggregation preserves records
     - **Property 14: Aggregation preserves records**
     - **Validates: Requirements 9.3**
 
