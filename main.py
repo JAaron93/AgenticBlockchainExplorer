@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # Initialize collector locks
         from collectors.base import init_collector_locks
-        await init_collector_locks()
+        init_collector_locks()
         logger.info("Collector locks initialized")
 
         logger.info("Application startup complete")

@@ -98,7 +98,7 @@ def _get_schema_validator_lock() -> asyncio.Lock:
     return _schema_validator_lock
 
 
-async def init_collector_locks():
+def init_collector_locks():
     """Explicitly initialize asyncio locks on the current event loop.
     
     This should be called during application startup to ensure locks are
