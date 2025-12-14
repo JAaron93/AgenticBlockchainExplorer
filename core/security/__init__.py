@@ -12,9 +12,9 @@ Currently implemented:
 - CircuitBreaker: Circuit breaker pattern for API resilience
 - ExponentialBackoff: Exponential backoff with jitter for retries
 - BlockchainDataValidator: Validates blockchain data formats
+- TimeoutManager: Manages hierarchical timeouts for agent runs
 
 Additional components will be added as the security hardening spec progresses:
-- Timeout management
 - Schema validation
 - Secure HTTP client
 """
@@ -60,6 +60,20 @@ from core.security.safe_path_handler import (
     PathTraversalError,
     SafePathHandler,
 )
+from core.security.timeout_manager import (
+    CollectionTimeoutError,
+    OverallTimeoutError,
+    TimeoutError,
+    TimeoutManager,
+)
+from core.security.schema_validator import (
+    ResponseSchemaValidator,
+    SchemaFallbackStrategy,
+    SchemaLoadError,
+    SchemaValidationError,
+    SchemaVersionClassification,
+    ValidationResult as SchemaValidationResult,
+)
 
 __all__ = [
     # Circuit breaker and retry
@@ -98,4 +112,16 @@ __all__ = [
     "InvalidFilenameError",
     "PathTraversalError",
     "SafePathHandler",
+    # Timeout management
+    "CollectionTimeoutError",
+    "OverallTimeoutError",
+    "TimeoutError",
+    "TimeoutManager",
+    # Schema validation
+    "ResponseSchemaValidator",
+    "SchemaFallbackStrategy",
+    "SchemaLoadError",
+    "SchemaValidationError",
+    "SchemaValidationResult",
+    "SchemaVersionClassification",
 ]

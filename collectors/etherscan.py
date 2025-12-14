@@ -204,7 +204,7 @@ class EtherscanCollector(ExplorerCollector):
             extra=log_extra
         )
         
-        response = await self._make_request(params, run_id)
+        response = await self._make_request(params, run_id, endpoint="tokentx")
         
         if response is None:
             logger.error(
@@ -335,7 +335,9 @@ class EtherscanCollector(ExplorerCollector):
             extra=log_extra
         )
         
-        response = await self._make_request(params, run_id)
+        response = await self._make_request(
+            params, run_id, endpoint="tokenholderlist"
+        )
         
         if response is None:
             logger.warning(

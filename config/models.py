@@ -401,6 +401,69 @@ class ResourceLimitConfig(BaseModel):
     )
 
 
+class TimeoutConfig(BaseModel):
+    """Configuration for collection timeout enforcement.
+
+    Defines timeouts for overall agent runs, per-stablecoin collections,
+    and graceful shutdown operations.
+
+    Requirements: 6.4, 6.5
+    """
+
+    overall_run_timeout_seconds: int = Field(
+        default=1800,  # 30 minutes
+        ge=60,  # Minimum 1 minute
+        le=86400,  # Maximum 24 hours
+        description="Maximum total runtime for the entire agent run across all stablecoins and explorers",
+    )
+    per_collection_timeout_seconds: int = Field(
+        default=180,  # 3 minutes
+        ge=30,  # Minimum 30 seconds
+        le=3600,  # Maximum 1 hour
+        description="Maximum time for collecting data for a single stablecoin from a single explorer",
+    )
+    shutdown_timeout_seconds: int = Field(
+        default=30,
+        ge=5,  # Minimum 5 seconds
+        le=300,  # Maximum 5 minutes
+        description="Maximum time to wait for graceful shutdown (file writes, cleanup)",
+    )
+
+    @model_validator(mode="after")
+    def validate_timeout_relationships(self) -> "TimeoutConfig":
+        """Validate that timeout values have sensible relationships.
+
+        Ensures:
+        - per_collection_timeout < overall_run_timeout
+        - shutdown_timeout < overall_run_timeout
+        - At least one collection can complete within overall timeout
+
+        Note: Full validation against actual collection count happens at runtime
+        in TimeoutManager, which may dynamically adjust per_collection_timeout.
+        """
+        if self.per_collection_timeout_seconds >= self.overall_run_timeout_seconds:
+            raise ValueError(
+                f"per_collection_timeout_seconds ({self.per_collection_timeout_seconds}) "
+                f"must be less than overall_run_timeout_seconds ({self.overall_run_timeout_seconds})"
+            )
+
+        if self.shutdown_timeout_seconds >= self.overall_run_timeout_seconds:
+            raise ValueError(
+                f"shutdown_timeout_seconds ({self.shutdown_timeout_seconds}) "
+                f"must be less than overall_run_timeout_seconds ({self.overall_run_timeout_seconds})"
+            )
+
+        # Ensure there's enough time for at least one collection plus shutdown
+        min_required = self.per_collection_timeout_seconds + self.shutdown_timeout_seconds
+        if min_required >= self.overall_run_timeout_seconds:
+            raise ValueError(
+                f"overall_run_timeout_seconds ({self.overall_run_timeout_seconds}) must be greater than "
+                f"per_collection_timeout_seconds + shutdown_timeout_seconds ({min_required})"
+            )
+
+        return self
+
+
 class Config(BaseModel):
     """Main configuration model."""
     

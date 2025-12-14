@@ -150,7 +150,7 @@
     - Test warning logging with field name only
     - _Requirements: 4.4_
 
-- [-] 7. Implement Safe File Path Handling
+- [x] 7. Implement Safe File Path Handling
   - [x] 7.1 Implement SafePathHandler class in core/security/safe_path_handler.py
     - Define UNSAFE_CHARS regex pattern
     - Implement safe_join() with path containment check
@@ -173,46 +173,46 @@
     - Test rollback on failure
     - _Requirements: 5.5_
 
-- [ ] 8. Implement Collection Timeout Enforcement
-  - [-] 8.1 Create TimeoutConfig model in config/models.py
+- [x] 8. Implement Collection Timeout Enforcement
+  - [x] 8.1 Create TimeoutConfig model in config/models.py
     - Add overall_run_timeout_seconds (default 1800)
     - Add per_collection_timeout_seconds (default 180)
     - Add shutdown_timeout_seconds (default 30)
     - Add model validator for timeout relationships
     - _Requirements: 6.4, 6.5_
-  - [ ] 8.2 Implement TimeoutManager class in core/security/timeout_manager.py
+  - [x] 8.2 Implement TimeoutManager class in core/security/timeout_manager.py
     - Implement overall_timeout and per_collection_timeout properties
     - Implement time_remaining() and should_terminate() methods
     - Implement start() and run_with_timeout() methods
     - _Requirements: 6.1, 6.2, 6.3, 6.6_
-  - [ ] 8.3 Write unit tests for timeout management
+  - [x] 8.3 Write unit tests for timeout management
     - Test timeout calculation with collection count
     - Test dynamic timeout adjustment
     - Test should_terminate() threshold
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
 
-- [ ] 9. Implement API Response Schema Validation
-  - [ ] 9.1 Create JSON schemas for explorer API responses in schemas/ directory
+- [x] 9. Implement API Response Schema Validation
+  - [x] 9.1 Create JSON schemas for explorer API responses in schemas/ directory
     - Create schemas/etherscan/tokentx.json for token transfer responses
     - Create schemas/etherscan/tokenholderlist.json for holder responses
     - Create schemas/bscscan/ and schemas/polygonscan/ with equivalent schemas
     - Define required fields, types, and max nesting depth (10 levels)
     - _Requirements: 4.8, 4.10_
-  - [ ] 9.2 Implement ResponseSchemaValidator class in core/security/schema_validator.py
+  - [x] 9.2 Implement ResponseSchemaValidator class in core/security/schema_validator.py
     - Implement load_schemas() to load JSON schemas from directory
     - Implement validate() method returning ValidationResult
     - Implement _check_nesting_depth() method
     - Implement get_schema_version() for logging
     - _Requirements: 4.8, 4.9_
-  - [ ] 9.3 Write property test for schema validation
+  - [x] 9.3 Write property test for schema validation
     - **Property 11: Schema Validation Rejects Invalid Structure**
     - **Validates: Requirements 4.8, 4.9**
-  - [ ] 9.4 Integrate schema validation in collectors
+  - [x] 9.4 Integrate schema validation in collectors
     - Add schema validation after receiving API responses
     - Skip invalid responses and log warnings with field paths only
     - Log schema version mismatches at WARNING level
     - _Requirements: 4.9, 4.11_
-  - [ ] 9.5 Write unit tests for schema validation
+  - [x] 9.5 Write unit tests for schema validation
     - Test valid response passes validation
     - Test missing required field fails validation
     - Test incorrect type fails validation

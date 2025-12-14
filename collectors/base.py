@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Optional
 
 import aiohttp
@@ -14,6 +15,30 @@ from collectors.models import Transaction, Holder, ExplorerData
 # Use standard logging to avoid circular imports
 # The logging will be configured by core.logging when the app starts
 logger = logging.getLogger(__name__)
+
+# Lazy import for schema validator to avoid circular imports
+_schema_validator = None
+
+
+def _get_schema_validator():
+    """Get or create the schema validator singleton."""
+    global _schema_validator
+    if _schema_validator is None:
+        try:
+            from core.security.schema_validator import (
+                ResponseSchemaValidator,
+                SchemaFallbackStrategy,
+            )
+            _schema_validator = ResponseSchemaValidator(
+                schema_directory=Path("schemas"),
+                fallback_strategy=SchemaFallbackStrategy.SKIP_VALIDATION,
+            )
+            _schema_validator.load_schemas()
+            logger.info("Schema validator initialized for collectors")
+        except Exception as e:
+            logger.warning(f"Failed to initialize schema validator: {e}")
+            _schema_validator = False  # Mark as failed, don't retry
+    return _schema_validator if _schema_validator else None
 
 
 class CollectorTimeoutError(Exception):
@@ -109,18 +134,28 @@ class ExplorerCollector(ABC):
         )
         await asyncio.sleep(wait_time)
     
-    def validate_response(self, response: dict) -> bool:
+    def validate_response(
+        self,
+        response: dict,
+        endpoint: Optional[str] = None,
+    ) -> bool:
         """Validate an API response.
+        
+        Performs both basic validation and JSON schema validation when
+        an endpoint is specified.
         
         Args:
             response: The JSON response from the API
+            endpoint: Optional endpoint name for schema validation
+                      (e.g., "tokentx", "tokenholderlist")
             
         Returns:
             True if the response is valid, False otherwise
         """
         if not isinstance(response, dict):
             logger.error(
-                f"Invalid response type from {self.name}: expected dict, got {type(response)}",
+                f"Invalid response type from {self.name}: "
+                f"expected dict, got {type(response)}",
                 extra={"explorer": self.name}
             )
             return False
@@ -137,6 +172,83 @@ class ExplorerCollector(ABC):
             logger.warning(
                 f"API error from {self.name}: {message}",
                 extra={"explorer": self.name, "message": message}
+            )
+            return False
+        
+        # Perform schema validation if endpoint is specified
+        if endpoint:
+            schema_valid = self._validate_response_schema(response, endpoint)
+            if not schema_valid:
+                return False
+        
+        return True
+    
+    def _validate_response_schema(
+        self,
+        response: dict,
+        endpoint: str,
+    ) -> bool:
+        """Validate response against JSON schema.
+        
+        Args:
+            response: The API response to validate
+            endpoint: The endpoint name (e.g., "tokentx")
+            
+        Returns:
+            True if valid or validation skipped, False if invalid
+            
+        Requirements: 4.8, 4.9, 4.11
+        """
+        validator = _get_schema_validator()
+        if validator is None:
+            # Schema validation not available, skip
+            return True
+        
+        # Map explorer name to schema directory name
+        explorer_name = self.name.lower().replace("scan", "scan")
+        
+        # Detect schema version from response
+        detected_version, version_source = validator.detect_response_version(
+            response
+        )
+        expected_version = validator.get_schema_version(explorer_name, endpoint)
+        
+        # Log version mismatch at WARNING level
+        if (detected_version != "unknown" and 
+            expected_version and 
+            detected_version != expected_version):
+            classification = validator.classify_version_mismatch(
+                detected_version, expected_version
+            )
+            logger.warning(
+                f"Schema version mismatch for {explorer_name}/{endpoint}: "
+                f"detected {detected_version} (from {version_source}), "
+                f"expected {expected_version}, classification: {classification.value}",
+                extra={
+                    "explorer": self.name,
+                    "endpoint": endpoint,
+                    "detected_version": detected_version,
+                    "expected_version": expected_version,
+                    "classification": classification.value,
+                }
+            )
+        
+        # Validate against schema
+        result = validator.validate(response, explorer_name, endpoint)
+        
+        if not result.is_valid:
+            # Log warning with field paths only (not raw values)
+            logger.warning(
+                f"Schema validation failed for {explorer_name}/{endpoint}: "
+                f"{len(result.errors)} error(s) at paths: "
+                f"{', '.join(result.field_paths[:5])}",
+                extra={
+                    "explorer": self.name,
+                    "endpoint": endpoint,
+                    "error_count": len(result.errors),
+                    "field_paths": result.field_paths[:10],
+                    "nesting_exceeded": result.nesting_depth_exceeded,
+                }
             )
             return False
         
@@ -171,7 +283,8 @@ class ExplorerCollector(ABC):
     async def _make_request(
         self,
         params: dict[str, Any],
-        run_id: Optional[str] = None
+        run_id: Optional[str] = None,
+        endpoint: Optional[str] = None,
     ) -> Optional[dict]:
         """Make an API request with retry logic and exponential backoff.
         
@@ -181,10 +294,13 @@ class ExplorerCollector(ABC):
         - Timeouts (configurable request timeout)
         - API authentication errors (401, 403)
         - Invalid responses
+        - Schema validation (when endpoint is specified)
         
         Args:
             params: Query parameters for the API request
             run_id: Optional run ID for logging correlation
+            endpoint: Optional endpoint name for schema validation
+                      (e.g., "tokentx", "tokenholderlist")
             
         Returns:
             The JSON response if successful, None otherwise
@@ -281,8 +397,8 @@ class ExplorerCollector(ABC):
                         await self.handle_rate_limit()
                         continue
                     
-                    # Validate response structure
-                    if not self.validate_response(data):
+                    # Validate response structure and schema
+                    if not self.validate_response(data, endpoint=endpoint):
                         if attempt < self.retry_config.max_attempts - 1:
                             backoff = self.retry_config.backoff_seconds * (2 ** attempt)
                             logger.info(
