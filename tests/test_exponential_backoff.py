@@ -180,7 +180,7 @@ class TestExponentialBackoffHeaderHonoring:
         # Should be approximately 60 seconds (allow some tolerance)
         assert 58.0 <= delay <= 62.0
 
-    def test_retry_after_takes_precedence_over_rate_limit_reset(self):
+    def test_uses_larger_delay_when_both_headers_present(self):
         """When both headers present, uses larger delay (stricter limit)."""
         backoff = ExponentialBackoff(
             base_delay=1.0,
@@ -199,7 +199,6 @@ class TestExponentialBackoffHeaderHonoring:
 
         # Should use the larger value (60 seconds)
         assert 58.0 <= delay <= 62.0
-
     def test_uses_larger_of_both_headers(self):
         """When both headers present with different values, uses larger."""
         backoff = ExponentialBackoff(

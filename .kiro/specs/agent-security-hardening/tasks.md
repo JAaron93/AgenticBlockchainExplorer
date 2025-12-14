@@ -120,19 +120,19 @@
     - Define GENESIS_TIMESTAMPS for supported chains
     - Implement validate_address() method
     - _Requirements: 4.1_
-  - [ ] 6.2 Write property test for address validation
+  - [x] 6.2 Write property test for address validation
     - **Property 5: Address Validation Correctness**
     - **Validates: Requirements 4.1**
   - [x] 6.3 Implement transaction hash validation
     - Implement validate_tx_hash() method
     - _Requirements: 4.2_
-  - [ ] 6.4 Write property test for transaction hash validation
+  - [x] 6.4 Write property test for transaction hash validation
     - **Property 6: Transaction Hash Validation Correctness**
     - **Validates: Requirements 4.2**
   - [x] 6.5 Implement amount validation with bounds checking
     - Implement validate_amount() with pattern and 2^256-1 bound
     - _Requirements: 4.3_
-  - [ ] 6.6 Write property test for amount validation
+  - [x] 6.6 Write property test for amount validation
     - **Property 7: Amount Validation Correctness**
     - **Validates: Requirements 4.3**
   - [x] 6.7 Implement timestamp and block number validation
@@ -142,10 +142,10 @@
   - [x] 6.8 Implement address normalization
     - Implement normalize_address() to lowercase
     - _Requirements: 4.5_
-  - [ ] 6.9 Write property test for address normalization idempotence
+  - [x] 6.9 Write property test for address normalization idempotence
     - **Property 8: Address Normalization Idempotence**
     - **Validates: Requirements 4.5**
-  - [ ] 6.10 Write unit tests for validation error handling
+  - [x] 6.10 Write unit tests for validation error handling
     - Test skip behavior on invalid records
     - Test warning logging with field name only
     - _Requirements: 4.4_
@@ -156,19 +156,19 @@
     - Implement safe_join() with path containment check
     - Implement validate_path() method
     - _Requirements: 5.1, 5.2_
-  - [ ] 7.2 Write property test for path containment
+  - [x] 7.2 Write property test for path containment
     - **Property 9: Path Containment**
     - **Validates: Requirements 5.1, 5.2**
   - [x] 7.3 Implement filename sanitization
     - Implement sanitize_filename() removing unsafe characters
     - _Requirements: 5.3_
-  - [ ] 7.4 Write property test for filename sanitization safety
+  - [x] 7.4 Write property test for filename sanitization safety
     - **Property 10: Filename Sanitization Safety**
     - **Validates: Requirements 5.3**
   - [x] 7.5 Implement atomic file writing
     - Implement atomic_write() using temp file and rename
     - _Requirements: 5.5_
-  - [ ] 7.6 Write unit tests for atomic write operations
+  - [x] 7.6 Write unit tests for atomic write operations
     - Test successful atomic write
     - Test rollback on failure
     - _Requirements: 5.5_
@@ -204,7 +204,7 @@
     - Implement _check_nesting_depth() method
     - Implement get_schema_version() for logging
     - _Requirements: 4.8, 4.9_
-  - [ ]* 9.3 Write property test for schema validation
+  - [ ] 9.3 Write property test for schema validation
     - **Property 11: Schema Validation Rejects Invalid Structure**
     - **Validates: Requirements 4.8, 4.9**
   - [ ] 9.4 Integrate schema validation in collectors
@@ -212,7 +212,7 @@
     - Skip invalid responses and log warnings with field paths only
     - Log schema version mismatches at WARNING level
     - _Requirements: 4.9, 4.11_
-  - [ ]* 9.5 Write unit tests for schema validation
+  - [ ] 9.5 Write unit tests for schema validation
     - Test valid response passes validation
     - Test missing required field fails validation
     - Test incorrect type fails validation
@@ -239,7 +239,7 @@
   - [ ] 11.3 Implement redirect handling with SSRF validation
     - Implement _handle_redirect() with rebinding check
     - _Requirements: 2.8, 2.9_
-  - [ ]* 11.4 Write integration tests for SecureHTTPClient
+  - [ ] 11.4 Write integration tests for SecureHTTPClient
     - Test parameter validation and sanitization
     - Test SSRF protection integration
     - Test response size limiting
@@ -263,12 +263,12 @@
     - Replace direct file operations with SafePathHandler
     - Use atomic_write() for output files
     - _Requirements: 5.1, 5.2, 5.3, 5.5_
-  - [ ]* 12.5 Write integration tests for collector security (test_integration.py)
+  - [ ] 12.5 Write integration tests for collector security (test_integration.py)
     - Test timeout behavior with GracefulTerminator persisting partial results
     - Test error isolation (SSRFError in one collection doesn't suppress others)
     - Test concurrent collections for race conditions in SSRFProtector._dns_cache
     - _Requirements: All_
-  - [ ]* 12.6 Write chaos/failure injection tests (test_chaos.py)
+  - [ ] 12.6 Write chaos/failure injection tests (test_chaos.py)
     - Test DNS resolution failures with SSRFProtector
     - Test cascade failures ensuring partial results persist
     - Test resource exhaustion (near 10MB responses, memory spikes)
@@ -285,7 +285,7 @@
     - Add MAX_RESPONSE_SIZE_BYTES env var support
     - Add OVERALL_RUN_TIMEOUT_SECONDS env var support
     - _Requirements: 2.2, 3.1, 6.4_
-  - [ ]* 13.3 Write unit tests for security configuration loading
+  - [ ] 13.3 Write unit tests for security configuration loading
     - Test default values
     - Test environment variable overrides
     - Test validation errors

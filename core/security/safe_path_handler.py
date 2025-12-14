@@ -125,7 +125,6 @@ class SafePathHandler:
         Raises:
             PathTraversalError: If resulting path escapes base directory.
 
-            Requirements: 5.1, 5.2
         Requirements: 5.1, 5.2
         """
         if not parts:

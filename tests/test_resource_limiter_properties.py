@@ -242,7 +242,7 @@ class TestResponseSizeEnforcement:
         )
 
     @settings(max_examples=100)
-    @given(size=st.integers(min_value=0, max_value=10 * 1024 * 1024))
+    @given(size=st.integers(min_value=0, max_value=20 * 1024 * 1024))
     def test_property_4_default_config_enforces_10mb_limit(self, size):
         """
         **Feature: agent-security-hardening, Property 4: Response Size Enforcement**
