@@ -124,8 +124,8 @@ class SafePathHandler:
 
         Raises:
             PathTraversalError: If resulting path escapes base directory.
-            InvalidFilenameError: If any path part has invalid characters.
 
+            Requirements: 5.1, 5.2
         Requirements: 5.1, 5.2
         """
         if not parts:

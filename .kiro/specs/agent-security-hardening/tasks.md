@@ -35,7 +35,7 @@
     - Implement is_allowed() and validate_url() methods
     - Implement from_config() class method
     - _Requirements: 2.1, 2.7, 2.10_
-  - [ ] 2.3 Write property test for domain allowlist enforcement
+  - [x] 2.3 Write property test for domain allowlist enforcement
     - **Property 2: Domain Allowlist Enforcement**
     - **Validates: Requirements 2.4, 2.5, 2.6**
   - [x] 2.4 Implement SSRFProtector class with private IP ranges
@@ -51,7 +51,7 @@
     - Implement validate_redirect() with rebinding detection
     - Implement _is_rebinding_attempt() method
     - _Requirements: 2.8, 2.9_
-  - [ ] 2.7 Write unit tests for DNS rebinding protection
+  - [x] 2.7 Write unit tests for DNS rebinding protection
     - Test DNS resolution pinning
     - Test rebinding detection (public→private)
     - Test redirect validation
@@ -71,7 +71,7 @@
     - Implement get_current_memory_mb() and get_current_cpu_seconds() methods
     - Implement safe_regex_match() with input size limit for ReDoS protection
     - _Requirements: 3.1, 3.2, 3.5, 3.6_
-  - [ ] 3.3 Write property test for response size enforcement
+  - [x] 3.3 Write property test for response size enforcement
     - **Property 4: Response Size Enforcement**
     - **Validates: Requirements 3.1, 3.2**
   - [x] 3.4 Implement GracefulTerminator class in core/security/graceful_terminator.py
@@ -79,7 +79,7 @@
     - Implement _cancel_tasks() for pending task cleanup
     - Implement _flush_results() with partial status flag
     - _Requirements: 3.7, 3.8, 3.9, 3.10_
-  - [ ] 3.5 Write unit tests for graceful termination
+  - [x] 3.5 Write unit tests for graceful termination
     - Test task cancellation
     - Test partial result persistence
     - Test termination logging
@@ -97,7 +97,7 @@
     - Implement is_allowed(), record_success(), record_failure() methods
     - Implement _transition_to() with structured logging
     - _Requirements: 3.13, 3.14_
-  - [ ] 4.3 Write unit tests for exponential backoff
+  - [x] 4.3 Write unit tests for exponential backoff
     - Test delay calculation with various attempts
     - Test header honoring (Retry-After, X-RateLimit-Reset)
     - Test budget enforcement
@@ -109,7 +109,7 @@
     - Test logging of state transitions
     - _Requirements: 3.13, 3.14_
 
-- [ ] 5. Checkpoint - Ensure all high priority tests pass
+- [x] 5. Checkpoint - Ensure all high priority tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Medium Priority Tasks
