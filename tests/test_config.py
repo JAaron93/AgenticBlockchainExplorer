@@ -3,6 +3,7 @@
 import json
 import pytest
 
+from pydantic import ValidationError
 from config import ConfigurationManager, Config
 
 
@@ -353,7 +354,7 @@ class TestSecurityConfigValidationErrors:
         config_path.write_text(json.dumps(base_config_data))
 
         manager = ConfigurationManager(config_path=str(config_path))
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(ValidationError):
             manager.load_config()
 
     def test_invalid_wildcard_domain_pattern(self, tmp_path, base_config_data):
@@ -368,7 +369,7 @@ class TestSecurityConfigValidationErrors:
         config_path.write_text(json.dumps(base_config_data))
 
         manager = ConfigurationManager(config_path=str(config_path))
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(ValidationError):
             manager.load_config()
 
     def test_empty_allowed_domains_in_json_raises_error(
@@ -385,7 +386,7 @@ class TestSecurityConfigValidationErrors:
         config_path.write_text(json.dumps(base_config_data))
 
         manager = ConfigurationManager(config_path=str(config_path))
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(ValidationError):
             manager.load_config()
 
 

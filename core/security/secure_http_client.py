@@ -314,6 +314,20 @@ class SecureHTTPClient:
                 ) as response:
                     # Check for redirect
                     if response.status in (301, 302, 303, 307, 308):
+                        # Capture original IP for DNS rebinding check on first request
+                        if redirect_count == 0:
+                            try:
+                                if response.connection and response.connection.transport:
+                                    peername = response.connection.transport.get_extra_info("peername")
+                                    if peername and len(peername) > 0:
+                                        original_resolved_ip = peername[0]
+                            except Exception as e:
+                                # Log warning but don't fail if we can't get IP
+                                if self._logger:
+                                    self._logger.warning(
+                                        f"Failed to capture original IP for DNS rebinding check: {e}"
+                                    )
+
                         redirect_count += 1
                         if redirect_count > self.MAX_REDIRECTS:
                             max_redir = self.MAX_REDIRECTS

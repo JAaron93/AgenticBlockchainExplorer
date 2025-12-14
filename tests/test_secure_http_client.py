@@ -384,8 +384,7 @@ class TestURLResolution:
 
         result = secure_client._resolve_redirect_url(base, redirect)
 
-        assert "v2" in result
-
+        assert result == "https://api.etherscan.io/v2"
 
 # =============================================================================
 # URL Detection Tests

@@ -501,10 +501,18 @@ class AgentOrchestrator:
         await self.update_progress(0.1, "Starting data collection")
 
         # Execute all collectors in parallel
-        tasks = [
-            self._collect_from_explorer(collector)
-            for collector in self._collectors
-        ]
+        tasks = []
+        for collector in self._collectors:
+            # Create task and track it (Requirement 6.3)
+            task = asyncio.create_task(self._collect_from_explorer(collector))
+            self._pending_tasks.append(task)
+            
+            # Remove from pending tasks when done
+            # We use a lambda to capturing the task object safely 
+            # or simply use the method since the callback receives the task
+            task.add_done_callback(lambda t: self._pending_tasks.remove(t) if t in self._pending_tasks else None)
+            
+            tasks.append(task)
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

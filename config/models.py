@@ -490,34 +490,6 @@ class SecurityConfig(BaseModel):
         description="Configuration for collection timeout enforcement",
     )
 
-
-class SecurityConfig(BaseModel):
-    """Combined security configuration.
-
-    Aggregates all security-related configuration models into a single
-    configuration section for the main Config model.
-
-    Requirements: 1.6, 1.7, 1.8, 1.9, 2.2, 2.3, 3.1, 6.4, 6.5
-    """
-
-    credential_sanitizer: CredentialSanitizerConfig = Field(
-        default_factory=CredentialSanitizerConfig,
-        description="Configuration for credential detection and redaction",
-    )
-    ssrf_protection: SSRFProtectionConfig = Field(
-        default_factory=SSRFProtectionConfig,
-        description="Configuration for SSRF protection and domain allowlisting",
-    )
-    resource_limits: ResourceLimitConfig = Field(
-        default_factory=ResourceLimitConfig,
-        description="Configuration for resource consumption limits",
-    )
-    timeouts: TimeoutConfig = Field(
-        default_factory=TimeoutConfig,
-        description="Configuration for collection timeout enforcement",
-    )
-
-
 class Config(BaseModel):
     """Main configuration model."""
 
@@ -547,10 +519,6 @@ class Config(BaseModel):
     )
     session: SessionConfig = Field(
         default_factory=SessionConfig, description="Session configuration"
-    )
-    security: SecurityConfig = Field(
-        default_factory=SecurityConfig,
-        description="Security hardening configuration",
     )
     security: SecurityConfig = Field(
         default_factory=SecurityConfig,

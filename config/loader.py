@@ -261,9 +261,6 @@ class ConfigurationManager:
         if cookie_samesite:
             config_data["session"]["cookie_samesite"] = cookie_samesite
 
-        # Security configuration
-        config_data = self._override_security_config(config_data)
-
         # Explorer API keys from environment
         if "explorers" in config_data:
             for explorer in config_data["explorers"]:

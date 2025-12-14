@@ -394,9 +394,9 @@ class TestBlockchainValidatorIntegration:
         tx = collector._parse_transaction(tx_data, "USDC")
         
         # Addresses should be normalized to lowercase
-        if tx:
-            assert tx.from_address == "0x" + "a" * 40
-            assert tx.to_address == "0x" + "b" * 40
+        assert tx is not None, "Transaction should be parsed successfully"
+        assert tx.from_address == "0x" + "a" * 40
+        assert tx.to_address == "0x" + "b" * 40
 
     def test_holder_address_normalization(
         self, mock_explorer_config, mock_retry_config
@@ -416,8 +416,8 @@ class TestBlockchainValidatorIntegration:
         holder = collector._parse_holder(holder_data, "USDC", "0x" + "d" * 40)
         
         # Address should be normalized to lowercase
-        if holder:
-            assert holder.address == "0x" + "c" * 40
+        assert holder is not None, "Holder should be parsed successfully"
+        assert holder.address == "0x" + "c" * 40
 
 
 class TestSecureHTTPClientIntegration:
@@ -480,4 +480,7 @@ class TestSecureHTTPClientIntegration:
                 )
             
             # Should still work with fallback
-            assert result is not None or result == {"status": "1", "message": "OK", "result": []}
+            # Option 1: Just verify fallback returned something
+            assert result is not None
+            # Option 2: Verify exact expected result
+            # assert result == {"status": "1", "message": "OK", "result": []}

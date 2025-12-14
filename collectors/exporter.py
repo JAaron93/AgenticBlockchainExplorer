@@ -31,21 +31,27 @@ AGENT_VERSION = "1.0.0"
 _safe_path_handler = None
 
 
+# Lazy import for SafePathHandler to avoid circular imports
+_safe_path_handler = None
+_cached_output_directory = None
+
+
 def _get_safe_path_handler(output_directory: str):
     """Get or create SafePathHandler for the output directory.
     
     Returns None if SafePathHandler is not available, allowing
     fallback to standard file operations.
     """
-    global _safe_path_handler
+    global _safe_path_handler, _cached_output_directory
     try:
         from core.security.safe_path_handler import SafePathHandler
         
         # Create new handler if directory changed or not initialized
-        if _safe_path_handler is None:
+        if _safe_path_handler is None or _cached_output_directory != output_directory:
             output_path = Path(output_directory)
             output_path.mkdir(parents=True, exist_ok=True)
             _safe_path_handler = SafePathHandler(output_path)
+            _cached_output_directory = output_directory
             logger.debug(f"SafePathHandler initialized for {output_directory}")
         
         return _safe_path_handler
@@ -396,6 +402,41 @@ class JSONExporter:
                 f"Failed to write JSON file: {e}"
             ) from e
     
+    def _validate_custom_path(self, output_path: str) -> None:
+        """Validate that custom output path is within the allowed directory.
+        
+        Args:
+            output_path: The custom output path to validate.
+            
+        Raises:
+            JSONExportError: If path is invalid or outside allowed directory.
+        """
+        try:
+            # Resolve absolute paths
+            base_dir = Path(self._output_directory).resolve()
+            # Handle non-existent base dir for validation context
+            if not base_dir.exists():
+                # If base dir doesn't exist yet, we check parent
+                # This is a best-effort check for the fallback usage
+                pass
+            
+            custom_path = Path(output_path).resolve()
+            
+            # Check if custom path is relative to base directory
+            # We use str conversion for compatibility and robustness
+            base_str = str(base_dir)
+            custom_str = str(custom_path)
+            
+            if not custom_str.startswith(base_str):
+                raise JSONExportError(
+                    f"Output path escapes allowed directory"
+                )
+                
+        except (OSError, ValueError) as e:
+            if isinstance(e, JSONExportError):
+                raise
+            raise JSONExportError(f"Invalid output path: {e}")
+
     async def _export_standard(
         self,
         output_data: Dict[str, Any],
@@ -416,6 +457,8 @@ class JSONExporter:
         """
         # Determine output file path
         if output_path:
+            # Validate custom path is safe
+            self._validate_custom_path(output_path)
             file_path = Path(output_path)
             # Ensure parent directory exists
             file_path.parent.mkdir(parents=True, exist_ok=True)

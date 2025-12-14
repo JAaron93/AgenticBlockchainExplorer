@@ -151,7 +151,7 @@ class BscscanCollector(ExplorerCollector):
             validator = _get_blockchain_validator()
             if validator:
                 # Validate transaction hash (Requirement 4.2)
-                if tx_hash and not validator.validate_tx_hash(tx_hash):
+                if not tx_hash or not validator.validate_tx_hash(tx_hash):
                     logger.warning(
                         f"Skipping record with invalid field: tx_hash",
                         extra={"explorer": self.name, "field": "tx_hash"}
@@ -159,14 +159,14 @@ class BscscanCollector(ExplorerCollector):
                     return None
                 
                 # Validate addresses (Requirement 4.1)
-                if from_address and not validator.validate_address(from_address):
+                if not from_address or not validator.validate_address(from_address):
                     logger.warning(
                         f"Skipping record with invalid field: from_address",
                         extra={"explorer": self.name, "field": "from_address"}
                     )
                     return None
                 
-                if to_address and not validator.validate_address(to_address):
+                if not to_address or not validator.validate_address(to_address):
                     logger.warning(
                         f"Skipping record with invalid field: to_address",
                         extra={"explorer": self.name, "field": "to_address"}
@@ -326,9 +326,9 @@ class BscscanCollector(ExplorerCollector):
             validator = _get_blockchain_validator()
             if validator:
                 # Validate address (Requirement 4.1)
-                if address and not validator.validate_address(address):
+                if not address or not validator.validate_address(address):
                     logger.warning(
-                        f"Skipping record with invalid field: address",
+                        f"Skipping record with invalid or missing field: address",
                         extra={"explorer": self.name, "field": "address"}
                     )
                     return None

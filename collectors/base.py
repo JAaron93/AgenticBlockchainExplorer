@@ -18,7 +18,15 @@ logger = logging.getLogger(__name__)
 
 # Lazy import for security components to avoid circular imports
 _secure_http_client = None
-_secure_http_client_lock = asyncio.Lock()
+_secure_http_client_lock = None
+
+
+def _get_secure_http_client_lock() -> asyncio.Lock:
+    """Get or create the secure http client lock (async-safe)."""
+    global _secure_http_client_lock
+    if _secure_http_client_lock is None:
+        _secure_http_client_lock = asyncio.Lock()
+    return _secure_http_client_lock
 
 
 async def _get_secure_http_client():
@@ -28,7 +36,7 @@ async def _get_secure_http_client():
     fallback to standard aiohttp session.
     """
     global _secure_http_client
-    async with _secure_http_client_lock:
+    async with _get_secure_http_client_lock():
         if _secure_http_client is None:
             try:
                 from core.security.secure_http_client import SecureHTTPClient
@@ -72,13 +80,21 @@ async def _get_secure_http_client():
 
 # Lazy import for schema validator to avoid circular imports
 _schema_validator = None
-_schema_validator_lock = asyncio.Lock()
+_schema_validator_lock = None
+
+
+def _get_schema_validator_lock() -> asyncio.Lock:
+    """Get or create the schema validator lock (async-safe)."""
+    global _schema_validator_lock
+    if _schema_validator_lock is None:
+        _schema_validator_lock = asyncio.Lock()
+    return _schema_validator_lock
 
 
 async def _get_schema_validator():
     """Get or create the schema validator singleton (async-safe)."""
     global _schema_validator
-    async with _schema_validator_lock:
+    async with _get_schema_validator_lock():
         if _schema_validator is None:
             try:
                 from core.security.schema_validator import (

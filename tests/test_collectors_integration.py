@@ -67,7 +67,7 @@ def mock_transaction_response():
         "message": "OK",
         "result": [
             {
-                "hash": "0x123abc456def",
+                "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
                 "blockNumber": "18500000",
                 "timeStamp": "1699000000",
                 "from": "0x1111111111111111111111111111111111111111",
@@ -77,7 +77,7 @@ def mock_transaction_response():
                 "gasPrice": "20000000000",
             },
             {
-                "hash": "0x789ghi012jkl",
+                "hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
                 "blockNumber": "18500001",
                 "timeStamp": "1699000100",
                 "from": "0x3333333333333333333333333333333333333333",
@@ -153,7 +153,7 @@ class TestEtherscanCollector:
 
             # Check first transaction
             tx1 = transactions[0]
-            assert tx1.transaction_hash == "0x123abc456def"
+            assert tx1.transaction_hash == "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
             assert tx1.stablecoin == "USDC"
             assert tx1.chain == "ethereum"
             assert tx1.amount == Decimal("1000")
@@ -358,7 +358,7 @@ class TestCollectorErrorHandling:
             "message": "OK",
             "result": [
                 {
-                    "hash": "0xvalid123",
+                    "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
                     "blockNumber": "18500000",
                     "timeStamp": "1699000000",
                     "from": "0x1111111111111111111111111111111111111111",
@@ -384,7 +384,7 @@ class TestCollectorErrorHandling:
 
             # Only valid transaction should be returned
             assert len(transactions) == 1
-            assert transactions[0].transaction_hash == "0xvalid123"
+            assert transactions[0].transaction_hash == "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
 
         await collector.close()
 
