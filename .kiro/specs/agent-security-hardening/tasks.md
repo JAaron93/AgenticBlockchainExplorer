@@ -85,14 +85,14 @@
     - Test termination logging
     - _Requirements: 3.7, 3.8, 3.9, 3.10_
 
-- [ ] 4. Implement Retry and Circuit Breaker Protection
-  - [ ] 4.1 Implement ExponentialBackoff class in core/security/circuit_breaker.py
+- [x] 4. Implement Retry and Circuit Breaker Protection
+  - [x] 4.1 Implement ExponentialBackoff class in core/security/circuit_breaker.py
     - Implement get_delay() with configurable base, multiplier, max delay
     - Implement get_delay_honoring_headers() for Retry-After and X-RateLimit-Reset
     - Implement is_within_budget() with placeholder accepting remaining_seconds parameter
     - **Note**: is_within_budget() takes remaining_seconds as parameter; integration with TimeoutManager (Task 8) happens in Task 11 (SecureHTTPClient)
     - _Requirements: 3.11, 3.12, 3.20, 3.21_
-  - [ ] 4.2 Implement CircuitBreaker class in core/security/circuit_breaker.py
+  - [x] 4.2 Implement CircuitBreaker class in core/security/circuit_breaker.py
     - Define CircuitBreakerState enum (CLOSED, OPEN, HALF_OPEN)
     - Implement is_allowed(), record_success(), record_failure() methods
     - Implement _transition_to() with structured logging
