@@ -295,7 +295,12 @@ class CircuitBreaker:
         failure_threshold: int = 5,
         cool_down_seconds: float = 300.0,
         half_open_success_threshold: int = 1,
-        half_open_failure_threshold: int = 1,
+    def record_failure(self) -> None:
+        ...
+        elif self._state == CircuitBreakerState.HALF_OPEN:
+            self._failure_count += 1
+            if self._failure_count >= self._half_open_failure_threshold:
+                self._transition_to(CircuitBreakerState.OPEN)
         logger: Optional["SecureLogger"] = None,
     ):
         """Initialize circuit breaker.
