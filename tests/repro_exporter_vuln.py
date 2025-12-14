@@ -18,7 +18,7 @@ class TestExporterPathValidation(unittest.TestCase):
     def tearDown(self):
         try:
             shutil.rmtree(self.test_dir)
-        except:
+        except OSError:
             pass
             
     def test_path_traversal_parent_directory(self):
@@ -67,6 +67,8 @@ class TestExporterPathValidation(unittest.TestCase):
             self.assertIn("Invalid output path", str(e))
         except Exception as e:
             self.fail(f"Should have raised JSONExportError, got {type(e)}")
+        else:
+            self.fail("Expected JSONExportError was not raised")
 
 if __name__ == "__main__":
     unittest.main()

@@ -98,6 +98,29 @@ def _get_schema_validator_lock() -> asyncio.Lock:
     return _schema_validator_lock
 
 
+async def init_collector_locks():
+    """Explicitly initialize asyncio locks on the current event loop.
+    
+    This should be called during application startup to ensure locks are
+    created on the correct event loop, avoiding potential race conditions
+    or loop binding issues with lazy initialization.
+    """
+    global _secure_http_client_lock, _schema_validator_lock
+    
+    # Initialize secure http client lock
+    if _secure_http_client_lock is None:
+        with _secure_http_client_lock_init:
+            if _secure_http_client_lock is None:
+                _secure_http_client_lock = asyncio.Lock()
+                logger.debug("Initialized _secure_http_client_lock")
+
+    # Initialize schema validator lock
+    if _schema_validator_lock is None:
+        with _schema_validator_lock_init:
+            if _schema_validator_lock is None:
+                _schema_validator_lock = asyncio.Lock()
+                logger.debug("Initialized _schema_validator_lock")
+
 async def _get_schema_validator():
     """Get or create the schema validator singleton (async-safe)."""
     global _schema_validator

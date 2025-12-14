@@ -90,6 +90,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         init_csrf_protection(secret_key=_config.app.secret_key)
         logger.info("CSRF protection initialized")
 
+        # Initialize collector locks
+        from collectors.base import init_collector_locks
+        await init_collector_locks()
+        logger.info("Collector locks initialized")
+
         logger.info("Application startup complete")
 
     except Exception as e:
