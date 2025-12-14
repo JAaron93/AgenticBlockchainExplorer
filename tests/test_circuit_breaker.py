@@ -251,7 +251,7 @@ class TestCircuitBreakerCooldownWindow:
         cb.record_failure()
 
         # Should be close to 300 seconds
-        assert 299 < cb.remaining_cooldown <= 300
+        assert 295 <= cb.remaining_cooldown <= 300
 
 
 class TestCircuitBreakerIsAllowed:

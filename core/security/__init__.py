@@ -14,7 +14,9 @@ Currently implemented:
 - BlockchainDataValidator: Validates blockchain data formats
 
 Additional components will be added as the security hardening spec progresses:
-- Safe file path handling
+- Timeout management
+- Schema validation
+- Secure HTTP client
 """
 
 from core.security.circuit_breaker import (
@@ -53,6 +55,11 @@ from core.security.blockchain_validator import (
     BlockchainValidationError,
     ValidationResult,
 )
+from core.security.safe_path_handler import (
+    InvalidFilenameError,
+    PathTraversalError,
+    SafePathHandler,
+)
 
 __all__ = [
     # Circuit breaker and retry
@@ -87,4 +94,8 @@ __all__ = [
     "BlockchainDataValidator",
     "BlockchainValidationError",
     "ValidationResult",
+    # Safe file path handling
+    "InvalidFilenameError",
+    "PathTraversalError",
+    "SafePathHandler",
 ]

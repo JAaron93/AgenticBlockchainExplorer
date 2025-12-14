@@ -13,14 +13,14 @@
     - Implement sanitize_url() for URL query parameter sanitization
     - Implement is_credential() for key-value credential detection
     - _Requirements: 1.1, 1.2, 1.5_
-  - [ ]* 1.3 Write property test for credential sanitization completeness
+  - [x] 1.3 Write property test for credential sanitization completeness
     - **Property 1: Credential Sanitization Completeness**
     - **Validates: Requirements 1.1, 1.2, 1.3, 1.5**
   - [x] 1.4 Implement SecureLogger class in core/security/secure_logger.py
     - Wrap standard logger with sanitization on all output methods
     - Implement exception() with stack trace sanitization
     - _Requirements: 1.3, 1.4_
-  - [ ]* 1.5 Write unit tests for SecureLogger
+  - [x] 1.5 Write unit tests for SecureLogger
     - Test info/warning/error sanitization
     - Test exception stack trace filtering
     - _Requirements: 1.3, 1.4_
@@ -35,7 +35,7 @@
     - Implement is_allowed() and validate_url() methods
     - Implement from_config() class method
     - _Requirements: 2.1, 2.7, 2.10_
-  - [ ]* 2.3 Write property test for domain allowlist enforcement
+  - [ ] 2.3 Write property test for domain allowlist enforcement
     - **Property 2: Domain Allowlist Enforcement**
     - **Validates: Requirements 2.4, 2.5, 2.6**
   - [x] 2.4 Implement SSRFProtector class with private IP ranges
@@ -43,7 +43,7 @@
     - Implement _is_private_ip() method
     - Implement validate_request() with domain and protocol checks
     - _Requirements: 2.4, 2.5, 2.6_
-  - [ ]* 2.5 Write property test for private IP blocking
+  - [ ] 2.5 Write property test for private IP blocking
     - **Property 3: Private IP Blocking**
     - **Validates: Requirements 2.9**
   - [x] 2.6 Implement DNS rebinding protection in SSRFProtector
@@ -51,7 +51,7 @@
     - Implement validate_redirect() with rebinding detection
     - Implement _is_rebinding_attempt() method
     - _Requirements: 2.8, 2.9_
-  - [ ]* 2.7 Write unit tests for DNS rebinding protection
+  - [ ] 2.7 Write unit tests for DNS rebinding protection
     - Test DNS resolution pinning
     - Test rebinding detection (public→private)
     - Test redirect validation
@@ -71,7 +71,7 @@
     - Implement get_current_memory_mb() and get_current_cpu_seconds() methods
     - Implement safe_regex_match() with input size limit for ReDoS protection
     - _Requirements: 3.1, 3.2, 3.5, 3.6_
-  - [ ]* 3.3 Write property test for response size enforcement
+  - [ ] 3.3 Write property test for response size enforcement
     - **Property 4: Response Size Enforcement**
     - **Validates: Requirements 3.1, 3.2**
   - [x] 3.4 Implement GracefulTerminator class in core/security/graceful_terminator.py
@@ -79,7 +79,7 @@
     - Implement _cancel_tasks() for pending task cleanup
     - Implement _flush_results() with partial status flag
     - _Requirements: 3.7, 3.8, 3.9, 3.10_
-  - [ ]* 3.5 Write unit tests for graceful termination
+  - [ ] 3.5 Write unit tests for graceful termination
     - Test task cancellation
     - Test partial result persistence
     - Test termination logging
@@ -97,7 +97,7 @@
     - Implement is_allowed(), record_success(), record_failure() methods
     - Implement _transition_to() with structured logging
     - _Requirements: 3.13, 3.14_
-  - [ ]* 4.3 Write unit tests for exponential backoff
+  - [ ] 4.3 Write unit tests for exponential backoff
     - Test delay calculation with various attempts
     - Test header honoring (Retry-After, X-RateLimit-Reset)
     - Test budget enforcement
@@ -120,19 +120,19 @@
     - Define GENESIS_TIMESTAMPS for supported chains
     - Implement validate_address() method
     - _Requirements: 4.1_
-  - [ ]* 6.2 Write property test for address validation
+  - [ ] 6.2 Write property test for address validation
     - **Property 5: Address Validation Correctness**
     - **Validates: Requirements 4.1**
   - [x] 6.3 Implement transaction hash validation
     - Implement validate_tx_hash() method
     - _Requirements: 4.2_
-  - [ ]* 6.4 Write property test for transaction hash validation
+  - [ ] 6.4 Write property test for transaction hash validation
     - **Property 6: Transaction Hash Validation Correctness**
     - **Validates: Requirements 4.2**
   - [x] 6.5 Implement amount validation with bounds checking
     - Implement validate_amount() with pattern and 2^256-1 bound
     - _Requirements: 4.3_
-  - [ ]* 6.6 Write property test for amount validation
+  - [ ] 6.6 Write property test for amount validation
     - **Property 7: Amount Validation Correctness**
     - **Validates: Requirements 4.3**
   - [x] 6.7 Implement timestamp and block number validation
@@ -142,39 +142,39 @@
   - [x] 6.8 Implement address normalization
     - Implement normalize_address() to lowercase
     - _Requirements: 4.5_
-  - [ ]* 6.9 Write property test for address normalization idempotence
+  - [ ] 6.9 Write property test for address normalization idempotence
     - **Property 8: Address Normalization Idempotence**
     - **Validates: Requirements 4.5**
-  - [ ]* 6.10 Write unit tests for validation error handling
+  - [ ] 6.10 Write unit tests for validation error handling
     - Test skip behavior on invalid records
     - Test warning logging with field name only
     - _Requirements: 4.4_
 
-- [ ] 7. Implement Safe File Path Handling
-  - [ ] 7.1 Implement SafePathHandler class in core/security/safe_path_handler.py
+- [-] 7. Implement Safe File Path Handling
+  - [x] 7.1 Implement SafePathHandler class in core/security/safe_path_handler.py
     - Define UNSAFE_CHARS regex pattern
     - Implement safe_join() with path containment check
     - Implement validate_path() method
     - _Requirements: 5.1, 5.2_
-  - [ ]* 7.2 Write property test for path containment
+  - [ ] 7.2 Write property test for path containment
     - **Property 9: Path Containment**
     - **Validates: Requirements 5.1, 5.2**
-  - [ ] 7.3 Implement filename sanitization
+  - [x] 7.3 Implement filename sanitization
     - Implement sanitize_filename() removing unsafe characters
     - _Requirements: 5.3_
-  - [ ]* 7.4 Write property test for filename sanitization safety
+  - [ ] 7.4 Write property test for filename sanitization safety
     - **Property 10: Filename Sanitization Safety**
     - **Validates: Requirements 5.3**
-  - [ ] 7.5 Implement atomic file writing
+  - [x] 7.5 Implement atomic file writing
     - Implement atomic_write() using temp file and rename
     - _Requirements: 5.5_
-  - [ ]* 7.6 Write unit tests for atomic write operations
+  - [ ] 7.6 Write unit tests for atomic write operations
     - Test successful atomic write
     - Test rollback on failure
     - _Requirements: 5.5_
 
 - [ ] 8. Implement Collection Timeout Enforcement
-  - [ ] 8.1 Create TimeoutConfig model in config/models.py
+  - [-] 8.1 Create TimeoutConfig model in config/models.py
     - Add overall_run_timeout_seconds (default 1800)
     - Add per_collection_timeout_seconds (default 180)
     - Add shutdown_timeout_seconds (default 30)
@@ -185,7 +185,7 @@
     - Implement time_remaining() and should_terminate() methods
     - Implement start() and run_with_timeout() methods
     - _Requirements: 6.1, 6.2, 6.3, 6.6_
-  - [ ]* 8.3 Write unit tests for timeout management
+  - [ ] 8.3 Write unit tests for timeout management
     - Test timeout calculation with collection count
     - Test dynamic timeout adjustment
     - Test should_terminate() threshold
