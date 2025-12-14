@@ -31,10 +31,7 @@ AGENT_VERSION = "1.0.0"
 _safe_path_handler = None
 
 
-# Lazy import for SafePathHandler to avoid circular imports
-_safe_path_handler = None
 _cached_output_directory = None
-
 
 def _get_safe_path_handler(output_directory: str):
     """Get or create SafePathHandler for the output directory.
@@ -414,28 +411,21 @@ class JSONExporter:
         try:
             # Resolve absolute paths
             base_dir = Path(self._output_directory).resolve()
-            # Handle non-existent base dir for validation context
-            if not base_dir.exists():
-                # If base dir doesn't exist yet, we check parent
-                # This is a best-effort check for the fallback usage
-                pass
             
+            # Use resolve(strict=False) to handle potentially non-existent paths
+            # while still resolving ".." components
             custom_path = Path(output_path).resolve()
             
-            # Check if custom path is relative to base directory
-            # We use str conversion for compatibility and robustness
-            base_str = str(base_dir)
-            custom_str = str(custom_path)
-            
-            if not custom_str.startswith(base_str):
+            # Use is_relative_to for secure containment check (Python 3.9+)
+            if not custom_path.is_relative_to(base_dir):
                 raise JSONExportError(
                     f"Output path escapes allowed directory"
                 )
                 
-        except (OSError, ValueError) as e:
+        except Exception as e:
             if isinstance(e, JSONExportError):
                 raise
-            raise JSONExportError(f"Invalid output path: {e}")
+            raise JSONExportError(f"Invalid output path: {e}") from e
 
     async def _export_standard(
         self,

@@ -5,6 +5,7 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Optional
+import threading
 
 import aiohttp
 
@@ -19,13 +20,16 @@ logger = logging.getLogger(__name__)
 # Lazy import for security components to avoid circular imports
 _secure_http_client = None
 _secure_http_client_lock = None
+_secure_http_client_lock_init = threading.Lock()
 
 
 def _get_secure_http_client_lock() -> asyncio.Lock:
     """Get or create the secure http client lock (async-safe)."""
     global _secure_http_client_lock
     if _secure_http_client_lock is None:
-        _secure_http_client_lock = asyncio.Lock()
+        with _secure_http_client_lock_init:
+            if _secure_http_client_lock is None:
+                _secure_http_client_lock = asyncio.Lock()
     return _secure_http_client_lock
 
 
@@ -81,13 +85,16 @@ async def _get_secure_http_client():
 # Lazy import for schema validator to avoid circular imports
 _schema_validator = None
 _schema_validator_lock = None
+_schema_validator_lock_init = threading.Lock()
 
 
 def _get_schema_validator_lock() -> asyncio.Lock:
     """Get or create the schema validator lock (async-safe)."""
     global _schema_validator_lock
     if _schema_validator_lock is None:
-        _schema_validator_lock = asyncio.Lock()
+        with _schema_validator_lock_init:
+            if _schema_validator_lock is None:
+                _schema_validator_lock = asyncio.Lock()
     return _schema_validator_lock
 
 
