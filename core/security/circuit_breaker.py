@@ -411,7 +411,9 @@ class CircuitBreaker:
                 self._transition_to(CircuitBreakerState.OPEN)
 
         elif self._state == CircuitBreakerState.HALF_OPEN:
-            self._transition_to(CircuitBreakerState.OPEN)
+            self._failure_count += 1
+            if self._failure_count >= self._half_open_failure_threshold:
+                self._transition_to(CircuitBreakerState.OPEN)
 
     def _transition_to(self, new_state: CircuitBreakerState) -> None:
         """Transition to new state with logging.
@@ -433,6 +435,7 @@ class CircuitBreaker:
 
         elif new_state == CircuitBreakerState.HALF_OPEN:
             self._success_count = 0
+            self._failure_count = 0
 
         elif new_state == CircuitBreakerState.CLOSED:
             self._failure_count = 0

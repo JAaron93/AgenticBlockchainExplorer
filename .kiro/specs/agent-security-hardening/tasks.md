@@ -102,7 +102,7 @@
     - Test header honoring (Retry-After, X-RateLimit-Reset)
     - Test budget enforcement
     - _Requirements: 3.11, 3.12, 3.15_
-  - [ ]* 4.4 Write unit tests for circuit breaker
+  - [x] 4.4 Write unit tests for circuit breaker
     - Test state transitions (closed→open→half-open→closed)
     - Test failure threshold triggering
     - Test cool-down window behavior
