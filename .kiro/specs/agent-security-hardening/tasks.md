@@ -114,8 +114,8 @@
 
 ## Medium Priority Tasks
 
-- [ ] 6. Implement Blockchain Data Validation
-  - [ ] 6.1 Implement BlockchainDataValidator class in core/security/blockchain_validator.py
+- [x] 6. Implement Blockchain Data Validation
+  - [x] 6.1 Implement BlockchainDataValidator class in core/security/blockchain_validator.py
     - Define ADDRESS_PATTERN, TX_HASH_PATTERN, AMOUNT_PATTERN regex
     - Define GENESIS_TIMESTAMPS for supported chains
     - Implement validate_address() method
@@ -123,23 +123,23 @@
   - [ ]* 6.2 Write property test for address validation
     - **Property 5: Address Validation Correctness**
     - **Validates: Requirements 4.1**
-  - [ ] 6.3 Implement transaction hash validation
+  - [x] 6.3 Implement transaction hash validation
     - Implement validate_tx_hash() method
     - _Requirements: 4.2_
   - [ ]* 6.4 Write property test for transaction hash validation
     - **Property 6: Transaction Hash Validation Correctness**
     - **Validates: Requirements 4.2**
-  - [ ] 6.5 Implement amount validation with bounds checking
+  - [x] 6.5 Implement amount validation with bounds checking
     - Implement validate_amount() with pattern and 2^256-1 bound
     - _Requirements: 4.3_
   - [ ]* 6.6 Write property test for amount validation
     - **Property 7: Amount Validation Correctness**
     - **Validates: Requirements 4.3**
-  - [ ] 6.7 Implement timestamp and block number validation
+  - [x] 6.7 Implement timestamp and block number validation
     - Implement validate_timestamp() with genesis bounds
     - Implement validate_block_number() with future buffer
     - _Requirements: 4.6, 4.7_
-  - [ ] 6.8 Implement address normalization
+  - [x] 6.8 Implement address normalization
     - Implement normalize_address() to lowercase
     - _Requirements: 4.5_
   - [ ]* 6.9 Write property test for address normalization idempotence

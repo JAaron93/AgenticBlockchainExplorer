@@ -11,9 +11,9 @@ Currently implemented:
 - GracefulTerminator: Handles graceful shutdown on timeout/resource exhaustion
 - CircuitBreaker: Circuit breaker pattern for API resilience
 - ExponentialBackoff: Exponential backoff with jitter for retries
+- BlockchainDataValidator: Validates blockchain data formats
 
 Additional components will be added as the security hardening spec progresses:
-- Blockchain data validation
 - Safe file path handling
 """
 
@@ -48,6 +48,11 @@ from core.security.ssrf_protector import (
     SSRFError,
     SSRFProtector,
 )
+from core.security.blockchain_validator import (
+    BlockchainDataValidator,
+    BlockchainValidationError,
+    ValidationResult,
+)
 
 __all__ = [
     # Circuit breaker and retry
@@ -78,4 +83,8 @@ __all__ = [
     "ExplorerDataOutput",
     "GracefulTerminator",
     "TerminationReport",
+    # Blockchain data validation
+    "BlockchainDataValidator",
+    "BlockchainValidationError",
+    "ValidationResult",
 ]
