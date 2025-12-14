@@ -366,6 +366,41 @@ class SSRFProtectionConfig(BaseModel):
         return validated
 
 
+class ResourceLimitConfig(BaseModel):
+    """Configuration for resource consumption limits.
+
+    Defines limits for response sizes, file sizes, and memory usage
+    to protect against resource exhaustion attacks.
+
+    Requirements: 3.1, 3.5, 3.6
+    """
+
+    max_response_size_bytes: int = Field(
+        default=10 * 1024 * 1024,  # 10MB
+        ge=1024,  # Minimum 1KB
+        le=100 * 1024 * 1024,  # Maximum 100MB
+        description="Maximum allowed API response body size in bytes",
+    )
+    max_output_file_size_bytes: int = Field(
+        default=100 * 1024 * 1024,  # 100MB
+        ge=1024,  # Minimum 1KB
+        le=1024 * 1024 * 1024,  # Maximum 1GB
+        description="Maximum allowed output file size in bytes",
+    )
+    max_memory_usage_mb: int = Field(
+        default=512,
+        ge=64,  # Minimum 64MB
+        le=8192,  # Maximum 8GB
+        description="Maximum allowed process memory usage in megabytes",
+    )
+    max_cpu_time_seconds: int = Field(
+        default=3600,  # 1 hour
+        ge=60,  # Minimum 1 minute
+        le=86400,  # Maximum 24 hours
+        description="Maximum allowed CPU time in seconds",
+    )
+
+
 class Config(BaseModel):
     """Main configuration model."""
     

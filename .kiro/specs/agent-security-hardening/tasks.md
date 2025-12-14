@@ -57,13 +57,13 @@
     - Test redirect validation
     - _Requirements: 2.8, 2.9_
 
-- [ ] 3. Implement Resource Exhaustion Protection
-  - [ ] 3.1 Create ResourceLimitConfig model in config/models.py
+- [x] 3. Implement Resource Exhaustion Protection
+  - [x] 3.1 Create ResourceLimitConfig model in config/models.py
     - Add max_response_size_bytes (default 10MB)
     - Add max_output_file_size_bytes (default 100MB)
     - Add max_memory_usage_mb (default 512MB)
     - _Requirements: 3.1, 3.5, 3.6_
-  - [ ] 3.2 Implement ResourceLimiter class in core/security/resource_limiter.py
+  - [x] 3.2 Implement ResourceLimiter class in core/security/resource_limiter.py
     - Implement check_response_size() method
     - Implement check_memory_usage() with psutil
     - Implement check_file_size() method
@@ -74,7 +74,7 @@
   - [ ]* 3.3 Write property test for response size enforcement
     - **Property 4: Response Size Enforcement**
     - **Validates: Requirements 3.1, 3.2**
-  - [ ] 3.4 Implement GracefulTerminator class in core/security/graceful_terminator.py
+  - [x] 3.4 Implement GracefulTerminator class in core/security/graceful_terminator.py
     - Implement terminate() method with task cancellation
     - Implement _cancel_tasks() for pending task cleanup
     - Implement _flush_results() with partial status flag
