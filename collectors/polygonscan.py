@@ -13,6 +13,23 @@ from collectors.models import Transaction, Holder, ActivityType
 # Use standard logging to avoid circular imports
 logger = logging.getLogger(__name__)
 
+# Lazy import for blockchain validator to avoid circular imports
+_blockchain_validator = None
+
+
+def _get_blockchain_validator():
+    """Get or create the blockchain validator singleton."""
+    global _blockchain_validator
+    if _blockchain_validator is None:
+        try:
+            from core.security.blockchain_validator import BlockchainDataValidator
+            _blockchain_validator = BlockchainDataValidator()
+            logger.debug("BlockchainDataValidator initialized for PolygonscanCollector")
+        except Exception as e:
+            logger.warning(f"Failed to initialize BlockchainDataValidator: {e}")
+            _blockchain_validator = False  # Mark as failed, don't retry
+    return _blockchain_validator if _blockchain_validator else None
+
 
 class PolygonscanCollector(ExplorerCollector):
     """Collector for Polygonscan API (Polygon/Matic blockchain).
@@ -112,17 +129,54 @@ class PolygonscanCollector(ExplorerCollector):
     ) -> Optional[Transaction]:
         """Parse a transaction from API response data.
         
+        Validates blockchain data formats using BlockchainDataValidator
+        when available. Invalid records are skipped with a warning log
+        containing only the field name (not the invalid value).
+        
         Args:
             tx_data: Raw transaction data from API
             stablecoin: The stablecoin symbol
             
         Returns:
-            Transaction object or None if parsing fails
+            Transaction object or None if parsing/validation fails
+            
+        Requirements: 4.1, 4.2, 4.3, 4.5
         """
         try:
             from_address = tx_data.get("from", "")
             to_address = tx_data.get("to", "")
+            tx_hash = tx_data.get("hash", "")
             value = tx_data.get("value", "0")
+            
+            # Validate using BlockchainDataValidator if available
+            validator = _get_blockchain_validator()
+            if validator:
+                # Validate transaction hash (Requirement 4.2)
+                if tx_hash and not validator.validate_tx_hash(tx_hash):
+                    logger.warning(
+                        f"Skipping record with invalid field: tx_hash",
+                        extra={"explorer": self.name, "field": "tx_hash"}
+                    )
+                    return None
+                
+                # Validate addresses (Requirement 4.1)
+                if from_address and not validator.validate_address(from_address):
+                    logger.warning(
+                        f"Skipping record with invalid field: from_address",
+                        extra={"explorer": self.name, "field": "from_address"}
+                    )
+                    return None
+                
+                if to_address and not validator.validate_address(to_address):
+                    logger.warning(
+                        f"Skipping record with invalid field: to_address",
+                        extra={"explorer": self.name, "field": "to_address"}
+                    )
+                    return None
+                
+                # Normalize addresses to lowercase (Requirement 4.5)
+                from_address = validator.normalize_address(from_address)
+                to_address = validator.normalize_address(to_address)
             
             amount = self._parse_amount(value, stablecoin)
             activity_type = self._classify_activity(from_address, to_address, amount)
@@ -133,10 +187,10 @@ class PolygonscanCollector(ExplorerCollector):
             if tx_data.get("gasUsed"):
                 gas_used = int(tx_data["gasUsed"])
             if tx_data.get("gasPrice"):
-                gas_price = Decimal(tx_data["gasPrice"]) / Decimal(10 ** 9)  # Convert to Gwei
+                gas_price = Decimal(tx_data["gasPrice"]) / Decimal(10 ** 9)
             
             return Transaction(
-                transaction_hash=tx_data.get("hash", ""),
+                transaction_hash=tx_hash,
                 block_number=int(tx_data.get("blockNumber", 0)),
                 timestamp=self._parse_timestamp(tx_data.get("timeStamp", "0")),
                 from_address=from_address,
@@ -154,7 +208,6 @@ class PolygonscanCollector(ExplorerCollector):
                 f"Failed to parse transaction from {self.name}: {e}",
                 extra={
                     "explorer": self.name,
-                    "tx_hash": tx_data.get("hash", "unknown"),
                     "error": str(e)
                 }
             )
@@ -252,17 +305,37 @@ class PolygonscanCollector(ExplorerCollector):
     ) -> Optional[Holder]:
         """Parse a holder from API response data.
         
+        Validates blockchain data formats using BlockchainDataValidator
+        when available. Invalid records are skipped with a warning log
+        containing only the field name (not the invalid value).
+        
         Args:
             holder_data: Raw holder data from API
             stablecoin: The stablecoin symbol
             contract_address: The token contract address
             
         Returns:
-            Holder object or None if parsing fails
+            Holder object or None if parsing/validation fails
+            
+        Requirements: 4.1, 4.5
         """
         try:
             address = holder_data.get("TokenHolderAddress", "")
             balance_str = holder_data.get("TokenHolderQuantity", "0")
+            
+            # Validate using BlockchainDataValidator if available
+            validator = _get_blockchain_validator()
+            if validator:
+                # Validate address (Requirement 4.1)
+                if address and not validator.validate_address(address):
+                    logger.warning(
+                        f"Skipping record with invalid field: address",
+                        extra={"explorer": self.name, "field": "address"}
+                    )
+                    return None
+                
+                # Normalize address to lowercase (Requirement 4.5)
+                address = validator.normalize_address(address)
             
             balance = self._parse_amount(balance_str, stablecoin)
             
@@ -284,7 +357,6 @@ class PolygonscanCollector(ExplorerCollector):
                 f"Failed to parse holder from {self.name}: {e}",
                 extra={
                     "explorer": self.name,
-                    "address": holder_data.get("TokenHolderAddress", "unknown"),
                     "error": str(e)
                 }
             )

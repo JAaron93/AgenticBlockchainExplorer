@@ -85,5 +85,53 @@
     "cookie_secure": false,
     "cookie_httponly": true,
     "cookie_samesite": "lax"
+  },
+  "security": {
+    "_comment": "Security hardening configuration - see docs/SECURITY.md for details",
+    "credential_sanitizer": {
+      "sensitive_param_names": [
+        "apikey",
+        "api_key",
+        "API_KEY",
+        "token",
+        "auth_token",
+        "secret",
+        "password",
+        "client_secret"
+      ],
+      "sensitive_header_names": [
+        "Authorization",
+        "X-API-Key",
+        "X-Auth-Token"
+      ],
+      "credential_patterns": [
+        "[a-zA-Z0-9]{32,}",
+        "eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+"
+      ],
+      "redaction_placeholder": "[REDACTED]"
+    },
+    "ssrf_protection": {
+      "allowed_domains": [
+        "api.etherscan.io",
+        "*.etherscan.io",
+        "api.bscscan.com",
+        "*.bscscan.com",
+        "api.polygonscan.com",
+        "*.polygonscan.com"
+      ],
+      "require_https": true,
+      "block_private_ips": true
+    },
+    "resource_limits": {
+      "max_response_size_bytes": 10485760,
+      "max_output_file_size_bytes": 104857600,
+      "max_memory_usage_mb": 512,
+      "max_cpu_time_seconds": 3600
+    },
+    "timeouts": {
+      "overall_run_timeout_seconds": 1800,
+      "per_collection_timeout_seconds": 180,
+      "shutdown_timeout_seconds": 30
+    }
   }
 }

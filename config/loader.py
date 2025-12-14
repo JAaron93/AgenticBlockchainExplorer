@@ -261,6 +261,9 @@ class ConfigurationManager:
         if cookie_samesite:
             config_data["session"]["cookie_samesite"] = cookie_samesite
 
+        # Security configuration
+        config_data = self._override_security_config(config_data)
+
         # Explorer API keys from environment
         if "explorers" in config_data:
             for explorer in config_data["explorers"]:
@@ -290,6 +293,9 @@ class ConfigurationManager:
                     value = os.getenv(env_var)
                     if value:
                         coin_config[chain] = value
+
+        # Security configuration overrides
+        config_data = self._override_security_config(config_data)
 
         return config_data
 
@@ -367,6 +373,142 @@ class ConfigurationManager:
                 return explorer
 
         return None
+
+    def _override_security_config(
+        self, config_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Override security configuration with environment variables.
+
+        Supports the following environment variables:
+        - ALLOWED_EXPLORER_DOMAINS: Comma-separated list of allowed domains
+        - MAX_RESPONSE_SIZE_BYTES: Maximum API response size in bytes
+        - OVERALL_RUN_TIMEOUT_SECONDS: Overall agent run timeout
+
+        Requirements: 2.2, 3.1, 6.4
+        """
+        if "security" not in config_data:
+            config_data["security"] = {}
+
+        security = config_data["security"]
+
+        # SSRF Protection - allowed domains
+        if "ssrf_protection" not in security:
+            security["ssrf_protection"] = {}
+
+        allowed_domains = os.getenv("ALLOWED_EXPLORER_DOMAINS")
+        if allowed_domains:
+            domains = [d.strip() for d in allowed_domains.split(",") if d.strip()]
+            if not domains:
+                raise ValueError(
+                    "ALLOWED_EXPLORER_DOMAINS cannot be empty when set. "
+                    "Provide comma-separated domain patterns."
+                )
+            security["ssrf_protection"]["allowed_domains"] = domains
+
+        require_https = os.getenv("SSRF_REQUIRE_HTTPS")
+        if require_https:
+            security["ssrf_protection"]["require_https"] = (
+                require_https.lower() in ["true", "1", "yes"]
+            )
+
+        block_private_ips = os.getenv("SSRF_BLOCK_PRIVATE_IPS")
+        if block_private_ips:
+            security["ssrf_protection"]["block_private_ips"] = (
+                block_private_ips.lower() in ["true", "1", "yes"]
+            )
+
+        # Resource Limits
+        if "resource_limits" not in security:
+            security["resource_limits"] = {}
+
+        max_response_size = os.getenv("MAX_RESPONSE_SIZE_BYTES")
+        if max_response_size:
+            try:
+                security["resource_limits"]["max_response_size_bytes"] = int(
+                    max_response_size
+                )
+            except ValueError:
+                raise ValueError(
+                    "Invalid MAX_RESPONSE_SIZE_BYTES: must be an integer"
+                )
+
+        max_output_size = os.getenv("MAX_OUTPUT_FILE_SIZE_BYTES")
+        if max_output_size:
+            try:
+                security["resource_limits"]["max_output_file_size_bytes"] = int(
+                    max_output_size
+                )
+            except ValueError:
+                raise ValueError(
+                    "Invalid MAX_OUTPUT_FILE_SIZE_BYTES: must be an integer"
+                )
+
+        max_memory = os.getenv("MAX_MEMORY_USAGE_MB")
+        if max_memory:
+            try:
+                security["resource_limits"]["max_memory_usage_mb"] = int(max_memory)
+            except ValueError:
+                raise ValueError(
+                    "Invalid MAX_MEMORY_USAGE_MB: must be an integer"
+                )
+
+        max_cpu = os.getenv("MAX_CPU_TIME_SECONDS")
+        if max_cpu:
+            try:
+                security["resource_limits"]["max_cpu_time_seconds"] = int(max_cpu)
+            except ValueError:
+                raise ValueError(
+                    "Invalid MAX_CPU_TIME_SECONDS: must be an integer"
+                )
+
+        # Timeouts
+        if "timeouts" not in security:
+            security["timeouts"] = {}
+
+        overall_timeout = os.getenv("OVERALL_RUN_TIMEOUT_SECONDS")
+        if overall_timeout:
+            try:
+                security["timeouts"]["overall_run_timeout_seconds"] = int(
+                    overall_timeout
+                )
+            except ValueError:
+                raise ValueError(
+                    "Invalid OVERALL_RUN_TIMEOUT_SECONDS: must be an integer"
+                )
+
+        per_collection_timeout = os.getenv("PER_COLLECTION_TIMEOUT_SECONDS")
+        if per_collection_timeout:
+            try:
+                security["timeouts"]["per_collection_timeout_seconds"] = int(
+                    per_collection_timeout
+                )
+            except ValueError:
+                raise ValueError(
+                    "Invalid PER_COLLECTION_TIMEOUT_SECONDS: must be an integer"
+                )
+
+        shutdown_timeout = os.getenv("SHUTDOWN_TIMEOUT_SECONDS")
+        if shutdown_timeout:
+            try:
+                security["timeouts"]["shutdown_timeout_seconds"] = int(
+                    shutdown_timeout
+                )
+            except ValueError:
+                raise ValueError(
+                    "Invalid SHUTDOWN_TIMEOUT_SECONDS: must be an integer"
+                )
+
+        # Credential Sanitizer
+        if "credential_sanitizer" not in security:
+            security["credential_sanitizer"] = {}
+
+        redaction_placeholder = os.getenv("CREDENTIAL_REDACTION_PLACEHOLDER")
+        if redaction_placeholder:
+            security["credential_sanitizer"]["redaction_placeholder"] = (
+                redaction_placeholder
+            )
+
+        return config_data
 
     @property
     def config(self) -> Config:

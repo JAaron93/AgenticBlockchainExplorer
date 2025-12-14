@@ -2,15 +2,20 @@
 
 Orchestrates data collection from multiple blockchain explorers,
 coordinates classification, aggregation, and export of results.
+Integrates security components for timeout management and graceful
+termination.
+
+Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6
 """
 
 import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from datetime import datetime
+from typing import Any, List, Optional
 
-from config.models import Config, ExplorerConfig
+from config.models import Config, ExplorerConfig, TimeoutConfig
 from collectors.base import ExplorerCollector
 from collectors.models import ExplorerData
 from collectors.etherscan import EtherscanCollector
@@ -24,6 +29,34 @@ from core.db_manager import DatabaseManager
 
 # Use standard logging - will be configured by core.logging when app starts
 logger = logging.getLogger(__name__)
+
+# Lazy imports for security components to avoid circular imports
+_timeout_manager_class = None
+_graceful_terminator_class = None
+
+
+def _get_timeout_manager_class():
+    """Get TimeoutManager class (lazy import)."""
+    global _timeout_manager_class
+    if _timeout_manager_class is None:
+        try:
+            from core.security.timeout_manager import TimeoutManager
+            _timeout_manager_class = TimeoutManager
+        except ImportError as e:
+            logger.warning(f"TimeoutManager not available: {e}")
+    return _timeout_manager_class
+
+
+def _get_graceful_terminator_class():
+    """Get GracefulTerminator class (lazy import)."""
+    global _graceful_terminator_class
+    if _graceful_terminator_class is None:
+        try:
+            from core.security.graceful_terminator import GracefulTerminator
+            _graceful_terminator_class = GracefulTerminator
+        except ImportError as e:
+            logger.warning(f"GracefulTerminator not available: {e}")
+    return _graceful_terminator_class
 
 
 def _set_run_id(run_id: Optional[str]) -> None:
@@ -98,6 +131,12 @@ class AgentOrchestrator:
     Coordinates the collection of stablecoin data from multiple blockchain
     explorers, classifies activities, aggregates results, and exports
     to JSON and database.
+    
+    Integrates security components:
+    - TimeoutManager for enforcing collection timeouts
+    - GracefulTerminator for handling timeout/resource exhaustion
+    
+    Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6
     """
 
     def __init__(
@@ -129,11 +168,81 @@ class AgentOrchestrator:
             db_manager=db_manager,
             output_directory=config.output.directory
         )
+        
+        # Security components (initialized lazily)
+        self._timeout_manager: Optional[Any] = None
+        self._graceful_terminator: Optional[Any] = None
+        self._start_time: Optional[datetime] = None
+        self._pending_tasks: List[asyncio.Task[Any]] = []
+        self._partial_results: List[ExplorerData] = []
 
     @property
     def run_id(self) -> str:
         """Get the run ID."""
         return self._run_id
+    
+    def _initialize_security_components(self) -> None:
+        """Initialize security components for timeout and graceful termination.
+        
+        Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6
+        """
+        # Calculate number of collections (stablecoins × explorers)
+        num_stablecoins = len(self._config.stablecoins)
+        num_explorers = len(self._config.explorers)
+        num_collections = num_stablecoins * num_explorers
+        
+        # Initialize TimeoutManager
+        TimeoutManagerClass = _get_timeout_manager_class()
+        if TimeoutManagerClass:
+            try:
+                # Get timeout config from security config if available
+                timeout_config = getattr(
+                    getattr(self._config, 'security', None),
+                    'timeouts',
+                    None
+                )
+                if timeout_config is None:
+                    # Use default timeout config
+                    timeout_config = TimeoutConfig()
+                
+                self._timeout_manager = TimeoutManagerClass(
+                    config=timeout_config,
+                    num_collections=max(num_collections, 1),
+                )
+                logger.info(
+                    f"TimeoutManager initialized: "
+                    f"overall={self._timeout_manager.overall_timeout}s, "
+                    f"per_collection={self._timeout_manager.per_collection_timeout}s",
+                    extra={"run_id": self._run_id}
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to initialize TimeoutManager: {e}",
+                    extra={"run_id": self._run_id}
+                )
+        
+        # Initialize GracefulTerminator
+        GracefulTerminatorClass = _get_graceful_terminator_class()
+        if GracefulTerminatorClass:
+            try:
+                shutdown_timeout = 30.0
+                if self._timeout_manager:
+                    shutdown_timeout = self._timeout_manager.shutdown_timeout
+                
+                self._graceful_terminator = GracefulTerminatorClass(
+                    shutdown_timeout=shutdown_timeout,
+                    output_directory=self._config.output.directory,
+                )
+                self._graceful_terminator.set_run_id(self._run_id)
+                logger.info(
+                    f"GracefulTerminator initialized: shutdown_timeout={shutdown_timeout}s",
+                    extra={"run_id": self._run_id}
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to initialize GracefulTerminator: {e}",
+                    extra={"run_id": self._run_id}
+                )
 
     def _create_collector(
         self, explorer_config: ExplorerConfig
@@ -253,11 +362,13 @@ class AgentOrchestrator:
         self,
         collector: ExplorerCollector
     ) -> ExplorerData:
-        """Collect data from a single explorer.
+        """Collect data from a single explorer with timeout enforcement.
 
         Implements graceful error handling to return partial results
         when collection partially fails. The explorer is considered
         successful if any data was collected, even with errors.
+        
+        Uses TimeoutManager for per-collection timeout enforcement.
 
         Args:
             collector: The collector to use.
@@ -265,6 +376,8 @@ class AgentOrchestrator:
         Returns:
             ExplorerData with collected transactions and holders,
             including any errors encountered.
+            
+        Requirements: 6.1, 6.2, 6.6
         """
         stablecoins = self._get_stablecoin_addresses(collector.chain)
         # Use run config override if specified, otherwise use app config
@@ -284,13 +397,27 @@ class AgentOrchestrator:
             }
         )
 
-        try:
+        async def do_collection() -> ExplorerData:
+            """Inner collection function to wrap with timeout."""
             async with collector:
-                result = await collector.collect_all(
+                return await collector.collect_all(
                     stablecoins=stablecoins,
                     max_records=max_records,
                     run_id=self._run_id
                 )
+
+        try:
+            # Use TimeoutManager if available (Requirement 6.1, 6.2)
+            if self._timeout_manager:
+                result = await self._timeout_manager.run_with_timeout(
+                    do_collection(),
+                    collection_name=collector.name,
+                )
+            else:
+                result = await do_collection()
+            
+            # Store partial result for graceful termination
+            self._partial_results.append(result)
             
             # Log result summary
             if result.errors:
@@ -326,11 +453,13 @@ class AgentOrchestrator:
                     "error_type": "timeout",
                 }
             )
-            return ExplorerData(
+            result = ExplorerData(
                 explorer_name=collector.name,
                 chain=collector.chain,
                 errors=[error_msg]
             )
+            self._partial_results.append(result)
+            return result
         except Exception as e:
             error_msg = f"Collection failed for {collector.name}: {type(e).__name__}: {e}"
             logger.error(
@@ -343,11 +472,13 @@ class AgentOrchestrator:
                 },
                 exc_info=True
             )
-            return ExplorerData(
+            result = ExplorerData(
                 explorer_name=collector.name,
                 chain=collector.chain,
                 errors=[error_msg]
             )
+            self._partial_results.append(result)
+            return result
 
     async def collect_from_all_explorers(self) -> list[ExplorerData]:
         """Collect data from all configured explorers in parallel.
@@ -477,21 +608,38 @@ class AgentOrchestrator:
         return report
 
     async def run(self) -> CollectionReport:
-        """Execute the full data collection pipeline.
+        """Execute the full data collection pipeline with timeout management.
 
         Orchestrates:
-        1. Collection from all explorers in parallel
-        2. Classification of activities
-        3. Aggregation and deduplication
-        4. Export to JSON and database
+        1. Initialize security components (TimeoutManager, GracefulTerminator)
+        2. Collection from all explorers in parallel with timeout enforcement
+        3. Classification of activities
+        4. Aggregation and deduplication
+        5. Export to JSON and database
+        6. Graceful termination on timeout or resource exhaustion
 
         Returns:
             CollectionReport with results summary.
+            
+        Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6
         """
         start_time = time.time()
+        self._start_time = datetime.utcnow()
+        self._partial_results = []
         
         # Set run_id in logging context for correlation
         _set_run_id(self._run_id)
+        
+        # Initialize security components
+        self._initialize_security_components()
+        
+        # Set start time for graceful terminator
+        if self._graceful_terminator:
+            self._graceful_terminator.set_start_time(self._start_time)
+        
+        # Start timeout manager
+        if self._timeout_manager:
+            self._timeout_manager.start()
 
         logger.info(
             f"Starting agent run {self._run_id}",
@@ -499,6 +647,7 @@ class AgentOrchestrator:
                 "run_id": self._run_id,
                 "user_id": self._user_id,
                 "explorers": [e.name for e in self._config.explorers],
+                "timeout_enabled": self._timeout_manager is not None,
             }
         )
 
@@ -512,6 +661,21 @@ class AgentOrchestrator:
         try:
             # Step 1: Collect from all explorers
             explorer_results = await self.collect_from_all_explorers()
+            
+            # Check if we should terminate (Requirement 6.3)
+            if self._timeout_manager and self._timeout_manager.should_terminate():
+                logger.warning(
+                    f"Overall timeout approaching, initiating graceful termination",
+                    extra={
+                        "run_id": self._run_id,
+                        "time_remaining": self._timeout_manager.time_remaining(),
+                    }
+                )
+                return await self._handle_graceful_termination(
+                    reason="overall_timeout_approaching",
+                    explorer_results=explorer_results,
+                    start_time=start_time,
+                )
 
             if not explorer_results:
                 raise RuntimeError("No data collected from any explorer")
@@ -562,12 +726,33 @@ class AgentOrchestrator:
 
         except Exception as e:
             duration = time.time() - start_time
+            
+            # Check if this is a timeout-related error
+            error_type = type(e).__name__
+            is_timeout = "Timeout" in error_type or "timeout" in str(e).lower()
+            
+            if is_timeout and self._graceful_terminator and self._partial_results:
+                # Handle graceful termination (Requirements 3.7, 3.8, 3.9, 3.10)
+                logger.warning(
+                    f"Timeout during agent run {self._run_id}, initiating graceful termination",
+                    extra={
+                        "run_id": self._run_id,
+                        "error": str(e),
+                        "partial_results_count": len(self._partial_results),
+                    }
+                )
+                return await self._handle_graceful_termination(
+                    reason=f"timeout: {e}",
+                    explorer_results=self._partial_results,
+                    start_time=start_time,
+                )
+            
             logger.error(
                 f"Agent run {self._run_id} failed: {e}",
                 extra={
                     "run_id": self._run_id,
                     "error": str(e),
-                    "error_type": type(e).__name__,
+                    "error_type": error_type,
                     "duration_seconds": duration,
                 },
                 exc_info=True
@@ -592,3 +777,75 @@ class AgentOrchestrator:
         finally:
             # Clear run_id from logging context
             _set_run_id(None)
+    
+    async def _handle_graceful_termination(
+        self,
+        reason: str,
+        explorer_results: List[ExplorerData],
+        start_time: float,
+    ) -> CollectionReport:
+        """Handle graceful termination with partial result persistence.
+        
+        Args:
+            reason: Reason for termination.
+            explorer_results: Collected results so far.
+            start_time: When the run started (time.time()).
+            
+        Returns:
+            CollectionReport with partial results.
+            
+        Requirements: 3.7, 3.8, 3.9, 3.10
+        """
+        duration = time.time() - start_time
+        
+        if self._graceful_terminator:
+            # Use GracefulTerminator to persist partial results
+            termination_report = await self._graceful_terminator.terminate(
+                reason=reason,
+                pending_tasks=self._pending_tasks,
+                partial_results=explorer_results,
+            )
+            
+            logger.info(
+                f"Graceful termination completed for run {self._run_id}",
+                extra={
+                    "run_id": self._run_id,
+                    "reason": reason,
+                    "records_collected": termination_report.records_collected,
+                    "records_persisted": termination_report.records_persisted,
+                    "output_file": termination_report.output_file,
+                }
+            )
+            
+            # Update status to partial
+            if self._db_manager:
+                await self._db_manager.update_run_status(
+                    run_id=self._run_id,
+                    status="partial",
+                    error_message=f"Graceful termination: {reason}"
+                )
+            
+            return CollectionReport(
+                run_id=self._run_id,
+                total_records=termination_report.records_persisted,
+                errors=[f"Graceful termination: {reason}"],
+                duration_seconds=duration,
+                output_file_path=termination_report.output_file,
+            )
+        else:
+            # Fallback without GracefulTerminator
+            total_records = sum(r.total_records for r in explorer_results)
+            
+            if self._db_manager:
+                await self._db_manager.update_run_status(
+                    run_id=self._run_id,
+                    status="partial",
+                    error_message=f"Termination: {reason}"
+                )
+            
+            return CollectionReport(
+                run_id=self._run_id,
+                total_records=total_records,
+                errors=[f"Termination: {reason}"],
+                duration_seconds=duration,
+            )

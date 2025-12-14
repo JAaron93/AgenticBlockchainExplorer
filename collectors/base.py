@@ -16,6 +16,60 @@ from collectors.models import Transaction, Holder, ExplorerData
 # The logging will be configured by core.logging when the app starts
 logger = logging.getLogger(__name__)
 
+# Lazy import for security components to avoid circular imports
+_secure_http_client = None
+_secure_http_client_lock = asyncio.Lock()
+
+
+async def _get_secure_http_client():
+    """Get or create the secure HTTP client singleton (async-safe).
+    
+    Returns None if security components are not available, allowing
+    fallback to standard aiohttp session.
+    """
+    global _secure_http_client
+    async with _secure_http_client_lock:
+        if _secure_http_client is None:
+            try:
+                from core.security.secure_http_client import SecureHTTPClient
+                from core.security.ssrf_protector import (
+                    SSRFProtector,
+                    DomainAllowlist,
+                )
+                from core.security.resource_limiter import ResourceLimiter
+                from core.security.credential_sanitizer import CredentialSanitizer
+                from core.security.secure_logger import SecureLogger
+                from config.models import (
+                    SSRFProtectionConfig,
+                    ResourceLimitConfig,
+                    CredentialSanitizerConfig,
+                )
+                
+                # Create security components with default configs
+                ssrf_config = SSRFProtectionConfig()
+                allowlist = DomainAllowlist(ssrf_config.allowed_domains)
+                ssrf_protector = SSRFProtector(allowlist)
+                
+                resource_config = ResourceLimitConfig()
+                resource_limiter = ResourceLimiter(resource_config)
+                
+                sanitizer_config = CredentialSanitizerConfig()
+                sanitizer = CredentialSanitizer(sanitizer_config)
+                
+                secure_logger = SecureLogger(logger, sanitizer)
+                
+                _secure_http_client = SecureHTTPClient(
+                    ssrf_protector=ssrf_protector,
+                    resource_limiter=resource_limiter,
+                    sanitizer=sanitizer,
+                    secure_logger=secure_logger,
+                )
+                logger.info("SecureHTTPClient initialized for collectors")
+            except Exception as e:
+                logger.warning(f"Failed to initialize SecureHTTPClient: {e}")
+                _secure_http_client = False  # Mark as failed, don't retry
+    return _secure_http_client if _secure_http_client else None
+
 # Lazy import for schema validator to avoid circular imports
 _schema_validator = None
 _schema_validator_lock = asyncio.Lock()
@@ -302,6 +356,7 @@ class ExplorerCollector(ABC):
         - API authentication errors (401, 403)
         - Invalid responses
         - Schema validation (when endpoint is specified)
+        - SSRF protection (via SecureHTTPClient when available)
         
         Args:
             params: Query parameters for the API request
@@ -311,11 +366,179 @@ class ExplorerCollector(ABC):
             
         Returns:
             The JSON response if successful, None otherwise
+            
+        Requirements: 1.1, 2.4, 3.1
         """
-        session = await self._get_session()
-        
         # Add API key to params
         params["apikey"] = self.api_key
+        
+        # Try to use SecureHTTPClient if available
+        secure_client = await _get_secure_http_client()
+        
+        if secure_client is not None:
+            return await self._make_secure_request(
+                secure_client, params, run_id, endpoint
+            )
+        else:
+            # Fallback to standard aiohttp session
+            return await self._make_standard_request(params, run_id, endpoint)
+    
+    async def _make_secure_request(
+        self,
+        secure_client: Any,
+        params: dict[str, Any],
+        run_id: Optional[str] = None,
+        endpoint: Optional[str] = None,
+    ) -> Optional[dict]:
+        """Make request using SecureHTTPClient with SSRF protection.
+        
+        Args:
+            secure_client: SecureHTTPClient instance
+            params: Query parameters for the API request
+            run_id: Optional run ID for logging correlation
+            endpoint: Optional endpoint name for schema validation
+            
+        Returns:
+            The JSON response if successful, None otherwise
+            
+        Requirements: 1.1, 2.4, 3.1
+        """
+        from core.security.ssrf_protector import SSRFError
+        from core.security.resource_limiter import ResponseTooLargeError
+        from core.security.secure_http_client import InvalidParameterError
+        
+        last_error: Optional[Exception] = None
+        
+        for attempt in range(self.retry_config.max_attempts):
+            log_extra = {
+                "explorer": self.name,
+                "attempt": attempt + 1,
+                "max_attempts": self.retry_config.max_attempts,
+                "secure_client": True,
+            }
+            if run_id:
+                log_extra["run_id"] = run_id
+            
+            try:
+                logger.debug(
+                    f"Making secure request to {self.name} (attempt {attempt + 1}/{self.retry_config.max_attempts})",
+                    extra=log_extra
+                )
+                
+                data = await secure_client.get(
+                    url=self.base_url,
+                    params=params,
+                    timeout=self.retry_config.request_timeout_seconds,
+                )
+                
+                # Check for API-level rate limiting
+                if self._is_rate_limit_error(data):
+                    logger.warning(
+                        f"API-level rate limit from {self.name}",
+                        extra={**log_extra, "error_type": "api_rate_limit"}
+                    )
+                    await self.handle_rate_limit()
+                    continue
+                
+                # Validate response structure and schema
+                if not await self.validate_response(data, endpoint=endpoint):
+                    if attempt < self.retry_config.max_attempts - 1:
+                        backoff = self.retry_config.backoff_seconds * (2 ** attempt)
+                        logger.info(
+                            f"Retrying {self.name} in {backoff} seconds after validation failure",
+                            extra={**log_extra, "backoff_seconds": backoff}
+                        )
+                        await asyncio.sleep(backoff)
+                        continue
+                    return None
+                
+                return data
+                
+            except SSRFError as e:
+                # SSRF errors are security issues - don't retry
+                logger.error(
+                    f"SSRF protection blocked request to {self.name}: {e}",
+                    extra={**log_extra, "error_type": "ssrf_blocked"}
+                )
+                return None
+                
+            except InvalidParameterError as e:
+                # Invalid parameters - don't retry
+                logger.error(
+                    f"Invalid parameters for {self.name}: {e}",
+                    extra={**log_extra, "error_type": "invalid_params"}
+                )
+                return None
+                
+            except ResponseTooLargeError as e:
+                # Response too large - don't retry
+                logger.error(
+                    f"Response too large from {self.name}: {e}",
+                    extra={**log_extra, "error_type": "response_too_large"}
+                )
+                return None
+                
+            except asyncio.TimeoutError:
+                last_error = CollectorTimeoutError(
+                    service=self.name,
+                    timeout_seconds=self.retry_config.request_timeout_seconds
+                )
+                logger.warning(
+                    f"Request timeout to {self.name} after {self.retry_config.request_timeout_seconds}s (attempt {attempt + 1})",
+                    extra={**log_extra, "error_type": "timeout"}
+                )
+            except aiohttp.ClientError as e:
+                last_error = e
+                logger.warning(
+                    f"Network error from {self.name}: {e} (attempt {attempt + 1})",
+                    extra={**log_extra, "error_type": "network", "error": str(e)}
+                )
+            except Exception as e:
+                last_error = e
+                logger.error(
+                    f"Unexpected error from {self.name}: {e}",
+                    extra={**log_extra, "error_type": "unexpected", "error": str(e)},
+                    exc_info=True
+                )
+            
+            # Exponential backoff before retry
+            if attempt < self.retry_config.max_attempts - 1:
+                backoff = self.retry_config.backoff_seconds * (2 ** attempt)
+                logger.info(
+                    f"Retrying {self.name} in {backoff} seconds",
+                    extra={**log_extra, "backoff_seconds": backoff}
+                )
+                await asyncio.sleep(backoff)
+        
+        logger.error(
+            f"All {self.retry_config.max_attempts} attempts failed for {self.name}",
+            extra={
+                "explorer": self.name,
+                "last_error": str(last_error),
+                "error_type": type(last_error).__name__ if last_error else "unknown",
+            }
+        )
+        return None
+    
+    async def _make_standard_request(
+        self,
+        params: dict[str, Any],
+        run_id: Optional[str] = None,
+        endpoint: Optional[str] = None,
+    ) -> Optional[dict]:
+        """Make request using standard aiohttp session (fallback).
+        
+        This is the fallback when SecureHTTPClient is not available.
+        
+        Args:
+            params: Query parameters for the API request
+            run_id: Optional run ID for logging correlation
+            endpoint: Optional endpoint name for schema validation
+            
+        Returns:
+            The JSON response if successful, None otherwise
+        """
+        session = await self._get_session()
         
         last_error: Optional[Exception] = None
         

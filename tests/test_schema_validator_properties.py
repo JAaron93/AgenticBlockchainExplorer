@@ -356,13 +356,13 @@ class TestSchemaValidationRejectsInvalidStructure:
         result = self.validator.validate(response, "etherscan", "tokentx")
 
         # Check that errors don't contain raw values
-        # Check that errors don't contain raw values
         raw_values = []
-        
+        MIN_STRING_LENGTH_TO_CHECK = 5
+
         # Collect potential raw values from response (strings > 5 chars)
         def collect_strings(obj):
             if isinstance(obj, str):
-                if len(obj) > 5:
+                if len(obj) > MIN_STRING_LENGTH_TO_CHECK:
                     raw_values.append(obj)
             elif isinstance(obj, dict):
                 for v in obj.values():
@@ -370,15 +370,16 @@ class TestSchemaValidationRejectsInvalidStructure:
             elif isinstance(obj, list):
                 for item in obj:
                     collect_strings(item)
-                    
+
         collect_strings(response)
-        
+
         for error in result.errors:
             # Error messages should reference paths
-            assert "Missing required" in error or "Invalid" in error or \
-                   "Validation error" in error, (
-                f"Unexpected error format: {error}"
-            )
+            assert (
+                "Missing required" in error
+                or "Invalid" in error
+                or "Validation error" in error
+            ), f"Unexpected error format: {error}"
             
             # Error messages should NOT contain raw data
             for val in raw_values:

@@ -1,6 +1,9 @@
 """JSON exporter for blockchain stablecoin data.
 
 Exports aggregated data to JSON files and persists results to database.
+Uses SafePathHandler for secure file operations.
+
+Requirements: 5.1, 5.2, 5.3, 5.5
 """
 
 from __future__ import annotations
@@ -23,6 +26,32 @@ logger = logging.getLogger(__name__)
 
 # Agent version for metadata
 AGENT_VERSION = "1.0.0"
+
+# Lazy import for SafePathHandler to avoid circular imports
+_safe_path_handler = None
+
+
+def _get_safe_path_handler(output_directory: str):
+    """Get or create SafePathHandler for the output directory.
+    
+    Returns None if SafePathHandler is not available, allowing
+    fallback to standard file operations.
+    """
+    global _safe_path_handler
+    try:
+        from core.security.safe_path_handler import SafePathHandler
+        
+        # Create new handler if directory changed or not initialized
+        if _safe_path_handler is None:
+            output_path = Path(output_directory)
+            output_path.mkdir(parents=True, exist_ok=True)
+            _safe_path_handler = SafePathHandler(output_path)
+            logger.debug(f"SafePathHandler initialized for {output_directory}")
+        
+        return _safe_path_handler
+    except Exception as e:
+        logger.warning(f"SafePathHandler not available: {e}")
+        return None
 
 
 class JSONExportError(Exception):
@@ -248,7 +277,12 @@ class JSONExporter:
         output_path: Optional[str] = None,
         user_id: Optional[str] = None
     ) -> str:
-        """Export aggregated data to JSON file.
+        """Export aggregated data to JSON file using SafePathHandler.
+
+        Uses SafePathHandler for secure file operations including:
+        - Path containment validation (prevents path traversal)
+        - Filename sanitization
+        - Atomic write operations
 
         Args:
             data: Aggregated data to export.
@@ -263,6 +297,8 @@ class JSONExporter:
         Raises:
             JSONExportError: If export fails.
             JSONSchemaValidationError: If data validation fails.
+            
+        Requirements: 5.1, 5.2, 5.3, 5.5
         """
         # Build output data structure
         output_data = self._build_output_data(data, run_id, user_id)
@@ -270,6 +306,114 @@ class JSONExporter:
         # Validate schema before writing
         self.validate_json_schema(output_data)
 
+        # Try to use SafePathHandler for secure file operations
+        safe_handler = _get_safe_path_handler(self._output_directory)
+        
+        if safe_handler:
+            return await self._export_with_safe_handler(
+                safe_handler, output_data, data, run_id, output_path
+            )
+        else:
+            return await self._export_standard(
+                output_data, data, run_id, output_path
+            )
+    
+    async def _export_with_safe_handler(
+        self,
+        safe_handler: Any,
+        output_data: Dict[str, Any],
+        data: AggregatedData,
+        run_id: str,
+        output_path: Optional[str] = None,
+    ) -> str:
+        """Export using SafePathHandler for secure file operations.
+        
+        Args:
+            safe_handler: SafePathHandler instance.
+            output_data: Data to export.
+            data: Original aggregated data for logging.
+            run_id: Run identifier.
+            output_path: Optional custom output path.
+            
+        Returns:
+            Path to the written JSON file.
+            
+        Requirements: 5.1, 5.2, 5.3, 5.5
+        """
+        from core.security.safe_path_handler import (
+            PathTraversalError,
+            InvalidFilenameError,
+        )
+        
+        try:
+            # Generate and sanitize filename (Requirement 5.3)
+            filename = self.generate_filename(run_id)
+            sanitized_filename = safe_handler.sanitize_filename(filename)
+            
+            if output_path:
+                # Validate custom path is within base directory (Req 5.1, 5.2)
+                custom_path = Path(output_path)
+                if not safe_handler.validate_path(custom_path):
+                    raise JSONExportError(
+                        f"Output path escapes allowed directory"
+                    )
+                file_path = custom_path
+            else:
+                # Use safe_join for path construction (Requirement 5.1, 5.2)
+                file_path = safe_handler.safe_join(sanitized_filename)
+            
+            # Serialize to JSON bytes
+            json_content = json.dumps(
+                output_data, indent=2, ensure_ascii=False
+            ).encode("utf-8")
+            
+            # Use atomic write (Requirement 5.5)
+            safe_handler.atomic_write(file_path, json_content)
+            
+            logger.info(
+                f"Exported {data.total_records} records to {file_path} (secure)",
+                extra={
+                    "run_id": run_id,
+                    "file_path": str(file_path),
+                    "total_records": data.total_records,
+                    "explorers": data.explorers_queried,
+                    "secure_export": True,
+                }
+            )
+            
+            return str(file_path)
+            
+        except PathTraversalError as e:
+            raise JSONExportError(
+                f"Path traversal detected: {e.message}"
+            ) from e
+        except InvalidFilenameError as e:
+            raise JSONExportError(
+                f"Invalid filename: {e.message}"
+            ) from e
+        except (OSError, IOError) as e:
+            raise JSONExportError(
+                f"Failed to write JSON file: {e}"
+            ) from e
+    
+    async def _export_standard(
+        self,
+        output_data: Dict[str, Any],
+        data: AggregatedData,
+        run_id: str,
+        output_path: Optional[str] = None,
+    ) -> str:
+        """Export using standard file operations (fallback).
+        
+        Args:
+            output_data: Data to export.
+            data: Original aggregated data for logging.
+            run_id: Run identifier.
+            output_path: Optional custom output path.
+            
+        Returns:
+            Path to the written JSON file.
+        """
         # Determine output file path
         if output_path:
             file_path = Path(output_path)

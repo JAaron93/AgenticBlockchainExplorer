@@ -464,20 +464,98 @@ class TimeoutConfig(BaseModel):
         return self
 
 
+class SecurityConfig(BaseModel):
+    """Combined security configuration for agent hardening.
+
+    Aggregates all security-related configurations including credential
+    sanitization, SSRF protection, resource limits, and timeouts.
+
+    Requirements: 1.6, 1.7, 1.8, 1.9, 2.2, 2.3, 3.1, 6.4, 6.5
+    """
+
+    credential_sanitizer: CredentialSanitizerConfig = Field(
+        default_factory=CredentialSanitizerConfig,
+        description="Configuration for credential detection and redaction",
+    )
+    ssrf_protection: SSRFProtectionConfig = Field(
+        default_factory=SSRFProtectionConfig,
+        description="Configuration for SSRF attack prevention",
+    )
+    resource_limits: ResourceLimitConfig = Field(
+        default_factory=ResourceLimitConfig,
+        description="Configuration for resource consumption limits",
+    )
+    timeouts: TimeoutConfig = Field(
+        default_factory=TimeoutConfig,
+        description="Configuration for collection timeout enforcement",
+    )
+
+
+class SecurityConfig(BaseModel):
+    """Combined security configuration.
+
+    Aggregates all security-related configuration models into a single
+    configuration section for the main Config model.
+
+    Requirements: 1.6, 1.7, 1.8, 1.9, 2.2, 2.3, 3.1, 6.4, 6.5
+    """
+
+    credential_sanitizer: CredentialSanitizerConfig = Field(
+        default_factory=CredentialSanitizerConfig,
+        description="Configuration for credential detection and redaction",
+    )
+    ssrf_protection: SSRFProtectionConfig = Field(
+        default_factory=SSRFProtectionConfig,
+        description="Configuration for SSRF protection and domain allowlisting",
+    )
+    resource_limits: ResourceLimitConfig = Field(
+        default_factory=ResourceLimitConfig,
+        description="Configuration for resource consumption limits",
+    )
+    timeouts: TimeoutConfig = Field(
+        default_factory=TimeoutConfig,
+        description="Configuration for collection timeout enforcement",
+    )
+
+
 class Config(BaseModel):
     """Main configuration model."""
-    
-    explorers: List[ExplorerConfig] = Field(..., description="List of blockchain explorers")
-    stablecoins: Dict[str, StablecoinConfig] = Field(..., description="Stablecoin contract addresses")
+
+    explorers: List[ExplorerConfig] = Field(
+        ..., description="List of blockchain explorers"
+    )
+    stablecoins: Dict[str, StablecoinConfig] = Field(
+        ..., description="Stablecoin contract addresses"
+    )
     auth0: Auth0Config = Field(..., description="Auth0 configuration")
     database: DatabaseConfig = Field(..., description="Database configuration")
     app: AppConfig = Field(..., description="Application configuration")
-    output: OutputConfig = Field(default_factory=OutputConfig, description="Output configuration")
-    retry: RetryConfig = Field(default_factory=RetryConfig, description="Retry configuration")
-    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig, description="Rate limit configuration")
-    logging: LoggingConfig = Field(default_factory=LoggingConfig, description="Logging configuration")
-    cors: CORSConfig = Field(default_factory=CORSConfig, description="CORS configuration")
-    session: SessionConfig = Field(default_factory=SessionConfig, description="Session configuration")
+    output: OutputConfig = Field(
+        default_factory=OutputConfig, description="Output configuration"
+    )
+    retry: RetryConfig = Field(
+        default_factory=RetryConfig, description="Retry configuration"
+    )
+    rate_limit: RateLimitConfig = Field(
+        default_factory=RateLimitConfig, description="Rate limit configuration"
+    )
+    logging: LoggingConfig = Field(
+        default_factory=LoggingConfig, description="Logging configuration"
+    )
+    cors: CORSConfig = Field(
+        default_factory=CORSConfig, description="CORS configuration"
+    )
+    session: SessionConfig = Field(
+        default_factory=SessionConfig, description="Session configuration"
+    )
+    security: SecurityConfig = Field(
+        default_factory=SecurityConfig,
+        description="Security hardening configuration",
+    )
+    security: SecurityConfig = Field(
+        default_factory=SecurityConfig,
+        description="Security hardening configuration",
+    )
     
     @field_validator("explorers")
     @classmethod

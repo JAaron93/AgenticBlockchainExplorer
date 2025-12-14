@@ -74,6 +74,11 @@ from core.security.schema_validator import (
     SchemaVersionClassification,
     ValidationResult as SchemaValidationResult,
 )
+from core.security.secure_http_client import (
+    InvalidParameterError,
+    SecureHTTPClient,
+    SecureHTTPClientError,
+)
 
 __all__ = [
     # Circuit breaker and retry
@@ -124,4 +129,8 @@ __all__ = [
     "SchemaValidationError",
     "SchemaValidationResult",
     "SchemaVersionClassification",
+    # Secure HTTP client
+    "InvalidParameterError",
+    "SecureHTTPClient",
+    "SecureHTTPClientError",
 ]

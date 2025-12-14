@@ -1,9 +1,11 @@
+
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://stablecoin-explorer/schemas/polygonscan/tokenholderlist.json",
   "title": "Polygonscan Token Holder List Response",
   "description": "JSON Schema for Polygonscan tokenholderlist API endpoint response",
-  "$comment": "Version 1.0.0. Strict root to enforce API envelope.",
+  "version": "1.0.0",
+  "$comment": "Strict root to enforce API envelope.",
   "type": "object",
   "required": ["status", "message", "result"],
   "properties": {
@@ -24,7 +26,7 @@
             "$ref": "#/definitions/tokenHolder"
           },
           "maxItems": 10000,
-          "$comment": "Empty arrays are valid if no holders are returned but the call was successful."
+          "$comment": "Empty arrays valid (no holders). Max 10k items defines an operational safety upper bound."
         },
         {
           "type": "string",
@@ -53,7 +55,7 @@
         }
       },
       "additionalProperties": true,
-      "$comment": "Intentionally true for forward compatibility."
+      "$comment": "Intentionally open (true) to allow the API to return new/extra fields without breaking this client."
     }
   },
   "additionalProperties": false

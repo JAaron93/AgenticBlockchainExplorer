@@ -220,78 +220,78 @@
     - Test error messages contain field paths, not raw values
     - _Requirements: 4.8, 4.9_
 
-- [ ] 10. Checkpoint - Ensure all medium priority tests pass
+- [x] 10. Checkpoint - Ensure all medium priority tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Integration Tasks
 
-- [ ] 11. Implement SecureHTTPClient
-  - [ ] 11.1 Create SecureHTTPClient class in core/security/secure_http_client.py
+- [x] 11. Implement SecureHTTPClient
+  - [x] 11.1 Create SecureHTTPClient class in core/security/secure_http_client.py
     - Define ALLOWED_PARAM_KEYS for explorer APIs
     - Implement _validate_params() method
     - Implement _sanitize_params_for_logging() method
     - _Requirements: 2.4, 2.5_
-  - [ ] 11.2 Implement get() method with all security validations
+  - [x] 11.2 Implement get() method with all security validations
     - Integrate SSRFProtector for URL validation
     - Integrate ResourceLimiter for response size checking
     - Integrate CredentialSanitizer for logging
     - _Requirements: 1.1, 1.2, 2.4, 2.5, 3.1, 3.2_
-  - [ ] 11.3 Implement redirect handling with SSRF validation
+  - [x] 11.3 Implement redirect handling with SSRF validation
     - Implement _handle_redirect() with rebinding check
     - _Requirements: 2.8, 2.9_
-  - [ ] 11.4 Write integration tests for SecureHTTPClient
+  - [x] 11.4 Write integration tests for SecureHTTPClient
     - Test parameter validation and sanitization
     - Test SSRF protection integration
     - Test response size limiting
     - _Requirements: 1.1, 2.4, 2.5, 3.1_
 
-- [ ] 12. Integrate Security Components with Collectors
-  - [ ] 12.1 Update ExplorerCollector base class to use SecureHTTPClient
+- [x] 12. Integrate Security Components with Collectors
+  - [x] 12.1 Update ExplorerCollector base class to use SecureHTTPClient
     - Replace aiohttp session with SecureHTTPClient
     - Update _make_request() to use secure client
     - _Requirements: 1.1, 2.4, 3.1_
-  - [ ] 12.2 Integrate BlockchainDataValidator in collectors
+  - [x] 12.2 Integrate BlockchainDataValidator in collectors
     - Add validation in _parse_transaction() methods
     - Add validation in _parse_holder() methods
     - Add address normalization
     - _Requirements: 4.1, 4.2, 4.3, 4.5_
-  - [ ] 12.3 Update orchestrator to use TimeoutManager and GracefulTerminator
+  - [x] 12.3 Update orchestrator to use TimeoutManager and GracefulTerminator
     - Add timeout management to run() method
     - Add graceful termination on timeout
     - _Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6_
-  - [ ] 12.4 Update exporter to use SafePathHandler
+  - [x] 12.4 Update exporter to use SafePathHandler
     - Replace direct file operations with SafePathHandler
     - Use atomic_write() for output files
     - _Requirements: 5.1, 5.2, 5.3, 5.5_
-  - [ ] 12.5 Write integration tests for collector security (test_integration.py)
+  - [x] 12.5 Write integration tests for collector security (test_integration.py)
     - Test timeout behavior with GracefulTerminator persisting partial results
     - Test error isolation (SSRFError in one collection doesn't suppress others)
     - Test concurrent collections for race conditions in SSRFProtector._dns_cache
     - _Requirements: All_
-  - [ ] 12.6 Write chaos/failure injection tests (test_chaos.py)
+  - [x] 12.6 Write chaos/failure injection tests (test_chaos.py)
     - Test DNS resolution failures with SSRFProtector
     - Test cascade failures ensuring partial results persist
     - Test resource exhaustion (near 10MB responses, memory spikes)
     - Test circuit breaker trip and recovery scenarios
     - _Requirements: 3.1, 3.2, 3.7, 3.8, 3.13, 3.14_
 
-- [ ] 13. Update Configuration Loading
-  - [ ] 13.1 Add SecurityConfig to main Config model
+- [x] 13. Update Configuration Loading
+  - [x] 13.1 Add SecurityConfig to main Config model
     - Add security field with SecurityConfig type
     - Update config.example.json with security section
     - _Requirements: 1.6, 1.7, 1.8, 1.9, 2.2, 2.3, 3.1, 6.4, 6.5_
-  - [ ] 13.2 Add environment variable overrides for security config
+  - [x] 13.2 Add environment variable overrides for security config
     - Add ALLOWED_EXPLORER_DOMAINS env var support
     - Add MAX_RESPONSE_SIZE_BYTES env var support
     - Add OVERALL_RUN_TIMEOUT_SECONDS env var support
     - _Requirements: 2.2, 3.1, 6.4_
-  - [ ] 13.3 Write unit tests for security configuration loading
+  - [x] 13.3 Write unit tests for security configuration loading
     - Test default values
     - Test environment variable overrides
     - Test validation errors
     - _Requirements: 1.9, 2.3, 6.5_
 
-- [ ] 14. Final Checkpoint - Ensure all tests pass
+- [x] 14. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Optional Tasks (Lower Priority)
