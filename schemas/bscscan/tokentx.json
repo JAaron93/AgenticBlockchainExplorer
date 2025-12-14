@@ -62,11 +62,13 @@
         },
         "nonce": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Transaction nonce as string"
         },
         "blockHash": {
           "type": "string",
-          "pattern": "^0x[a-fA-F0-9]{64}$"
+          "pattern": "^0x[a-fA-F0-9]{64}$",
+          "description": "Block hash"
         },
         "from": {
           "type": "string",
@@ -89,45 +91,60 @@
           "description": "Token amount in smallest unit"
         },
         "tokenName": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "description": "Token name"
         },
         "tokenSymbol": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "description": "Token symbol"
         },
         "tokenDecimal": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Token decimals as string"
         },
         "transactionIndex": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Transaction index in block"
         },
         "gas": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Gas limit"
         },
         "gasPrice": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Gas price in wei"
         },
         "gasUsed": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Gas used by transaction"
         },
         "cumulativeGasUsed": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Cumulative gas used in block"
         },
         "input": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]*$",
+          "description": "Input data, often '0x' for simple transfers"
         },
         "confirmations": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Number of confirmations"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": true,
+      "$comment": "Intentionally open to allow BscScan to add new fields to transfer records without breaking validation (forward compatibility)."
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$comment": "Root schema is strict to enforce the standard API envelope structure."
 }

@@ -18,26 +18,32 @@ logger = logging.getLogger(__name__)
 
 # Lazy import for schema validator to avoid circular imports
 _schema_validator = None
+_schema_validator_lock = asyncio.Lock()
 
 
-def _get_schema_validator():
-    """Get or create the schema validator singleton."""
+async def _get_schema_validator():
+    """Get or create the schema validator singleton (async-safe)."""
     global _schema_validator
-    if _schema_validator is None:
-        try:
-            from core.security.schema_validator import (
-                ResponseSchemaValidator,
-                SchemaFallbackStrategy,
-            )
-            _schema_validator = ResponseSchemaValidator(
-                schema_directory=Path("schemas"),
-                fallback_strategy=SchemaFallbackStrategy.SKIP_VALIDATION,
-            )
-            _schema_validator.load_schemas()
-            logger.info("Schema validator initialized for collectors")
-        except Exception as e:
-            logger.warning(f"Failed to initialize schema validator: {e}")
-            _schema_validator = False  # Mark as failed, don't retry
+    async with _schema_validator_lock:
+        if _schema_validator is None:
+            try:
+                from core.security.schema_validator import (
+                    ResponseSchemaValidator,
+                    SchemaFallbackStrategy,
+                )
+                # Resolve schemas directory relative to this file
+                # collectors/base.py -> ../schemas
+                schema_dir = Path(__file__).resolve().parent.parent / "schemas"
+                
+                _schema_validator = ResponseSchemaValidator(
+                    schema_directory=schema_dir,
+                    fallback_strategy=SchemaFallbackStrategy.SKIP_VALIDATION,
+                )
+                _schema_validator.load_schemas()
+                logger.info("Schema validator initialized for collectors")
+            except Exception as e:
+                logger.warning(f"Failed to initialize schema validator: {e}")
+                _schema_validator = False  # Mark as failed, don't retry
     return _schema_validator if _schema_validator else None
 
 
@@ -134,7 +140,7 @@ class ExplorerCollector(ABC):
         )
         await asyncio.sleep(wait_time)
     
-    def validate_response(
+    async def validate_response(
         self,
         response: dict,
         endpoint: Optional[str] = None,
@@ -177,13 +183,13 @@ class ExplorerCollector(ABC):
         
         # Perform schema validation if endpoint is specified
         if endpoint:
-            schema_valid = self._validate_response_schema(response, endpoint)
+            schema_valid = await self._validate_response_schema(response, endpoint)
             if not schema_valid:
                 return False
         
         return True
     
-    def _validate_response_schema(
+    async def _validate_response_schema(
         self,
         response: dict,
         endpoint: str,
@@ -199,13 +205,13 @@ class ExplorerCollector(ABC):
             
         Requirements: 4.8, 4.9, 4.11
         """
-        validator = _get_schema_validator()
+        validator = await _get_schema_validator()
         if validator is None:
             # Schema validation not available, skip
             return True
         
         # Map explorer name to schema directory name
-        explorer_name = self.name.lower().replace("scan", "scan")
+        explorer_name = self.name.lower()  # or the intended transformation
         
         # Detect schema version from response
         detected_version, version_source = validator.detect_response_version(
@@ -238,15 +244,16 @@ class ExplorerCollector(ABC):
         
         if not result.is_valid:
             # Log warning with field paths only (not raw values)
+            visible_paths = result.field_paths[:10]
             logger.warning(
                 f"Schema validation failed for {explorer_name}/{endpoint}: "
                 f"{len(result.errors)} error(s) at paths: "
-                f"{', '.join(result.field_paths[:5])}",
+                f"{', '.join(visible_paths)}",
                 extra={
                     "explorer": self.name,
                     "endpoint": endpoint,
                     "error_count": len(result.errors),
-                    "field_paths": result.field_paths[:10],
+                    "field_paths": visible_paths,
                     "nesting_exceeded": result.nesting_depth_exceeded,
                 }
             )
@@ -398,7 +405,7 @@ class ExplorerCollector(ABC):
                         continue
                     
                     # Validate response structure and schema
-                    if not self.validate_response(data, endpoint=endpoint):
+                    if not await self.validate_response(data, endpoint=endpoint):
                         if attempt < self.retry_config.max_attempts - 1:
                             backoff = self.retry_config.backoff_seconds * (2 ** attempt)
                             logger.info(

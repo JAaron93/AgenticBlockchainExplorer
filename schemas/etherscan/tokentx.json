@@ -89,10 +89,12 @@
           "description": "Token amount in smallest unit"
         },
         "tokenName": {
-          "type": "string"
+          "type": "string",
+          "description": "Human-readable token name"
         },
         "tokenSymbol": {
-          "type": "string"
+          "type": "string",
+          "description": "Token ticker symbol"
         },
         "tokenDecimal": {
           "type": "string",
@@ -119,11 +121,14 @@
           "pattern": "^[0-9]+$"
         },
         "input": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]*$",
+          "description": "Input data, often '0x' for simple transfers"
         },
         "confirmations": {
           "type": "string",
-          "pattern": "^[0-9]+$"
+          "pattern": "^[0-9]+$",
+          "description": "Number of block confirmations as string"
         }
       },
       "additionalProperties": true

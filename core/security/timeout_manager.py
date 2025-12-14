@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class TimeoutError(Exception):
+class AgentTimeoutError(Exception):
     """Raised when a timeout is exceeded."""
 
     pass
 
 
-class CollectionTimeoutError(TimeoutError):
+class CollectionTimeoutError(AgentTimeoutError):
     """Raised when per-collection timeout is exceeded."""
 
     def __init__(self, collection_name: str, timeout_seconds: float):
@@ -38,7 +38,7 @@ class CollectionTimeoutError(TimeoutError):
         )
 
 
-class OverallTimeoutError(TimeoutError):
+class OverallTimeoutError(AgentTimeoutError):
     """Raised when overall run timeout is exceeded."""
 
     def __init__(self, timeout_seconds: float, elapsed_seconds: float):
@@ -125,7 +125,7 @@ class TimeoutManager:
 
         if max_sequential_time <= available_time:
             # Configured timeout fits within overall timeout
-            return float(configured_per_collection)
+            return configured_per_collection
 
         # Need to adjust per-collection timeout
         adjusted_timeout = available_time / self._num_collections
@@ -241,7 +241,7 @@ class TimeoutManager:
         timeout: Optional[float] = None,
         collection_name: Optional[str] = None,
     ) -> T:
-        """Run coroutine with timeout, raising TimeoutError if exceeded.
+        """Run coroutine with timeout, raising AgentTimeoutError if exceeded.
 
         Args:
             coro: Coroutine to run.

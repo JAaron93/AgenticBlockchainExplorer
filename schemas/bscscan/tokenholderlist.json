@@ -27,6 +27,9 @@
         },
         {
           "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^(No token holder found|Error: .*)$",
           "description": "Error message or 'No token holder found'"
         }
       ]
@@ -54,5 +57,22 @@
       "additionalProperties": true
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "examples": [
+    {
+      "status": "1",
+      "message": "OK",
+      "result": [
+        {
+          "TokenHolderAddress": "0x1234567890123456789012345678901234567890",
+          "TokenHolderQuantity": "1000000000000000000"
+        }
+      ]
+    },
+    {
+      "status": "0",
+      "message": "No transactions found",
+      "result": "No token holder found"
+    }
+  ]
 }

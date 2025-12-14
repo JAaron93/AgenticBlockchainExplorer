@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from hypothesis import given, strategies as st, settings, assume
+import unittest.mock as mock
 
 from core.security.safe_path_handler import (
     SafePathHandler,
@@ -111,11 +112,19 @@ def absolute_path_outside_base(draw, base_dir: str):
     # Generate a path that starts from root but goes elsewhere
     components = [draw(safe_path_component()) for _ in range(2)]
     
-    # Make sure it's not accidentally inside base_dir
-    path = "/" + "/".join(components)
-    assume(not path.startswith(base_dir))
+    # Use anchor from base_dir for cross-platform root
+    anchor = Path(base_dir).anchor
+    path_obj = Path(anchor, *components)
     
-    return path
+    # Make sure it's not accidentally inside base_dir
+    try:
+        path_obj.relative_to(base_dir)
+        # If relative_to succeeds, it is inside the base_dir
+        assume(False)
+    except ValueError:
+        pass
+    
+    return str(path_obj)
 
 
 # =============================================================================
@@ -376,17 +385,22 @@ class TestPathContainment:
         """
         with temp_base_directory() as temp_base_dir:
             handler = SafePathHandler(temp_base_dir)
-            
-            # Create a subdirectory
-            subdir = temp_base_dir / safe_component
-            subdir.mkdir(exist_ok=True)
-            
-            # Create a symlink within base that points within base
-            link_name = f"link_{safe_component}"
-            link_path = temp_base_dir / link_name
+            subdir = None
+            link_path = None
             
             try:
-                link_path.symlink_to(subdir)
+                # Prepare paths
+                subdir = temp_base_dir / safe_component
+                link_name = f"link_{safe_component}"
+                link_path = temp_base_dir / link_name
+                
+                subdir.mkdir(exist_ok=True)
+                
+                try:
+                    link_path.symlink_to(subdir)
+                except OSError:
+                    # Skip if symlinks not supported
+                    pytest.skip("Symlinks not supported on this system")
                 
                 # safe_join should resolve the symlink and validate
                 result = handler.safe_join(link_name)
@@ -395,15 +409,21 @@ class TestPathContainment:
                 assert handler.validate_path(result) is True, (
                     f"Symlink resolution should stay within base directory"
                 )
-            except OSError:
-                # Skip if symlinks not supported
-                pytest.skip("Symlinks not supported on this system")
+            
             finally:
                 # Cleanup
-                if link_path.exists() or link_path.is_symlink():
-                    link_path.unlink()
-                if subdir.exists():
-                    subdir.rmdir()
+                if link_path is not None:
+                    try:
+                        if link_path.is_symlink() or link_path.exists():
+                            link_path.unlink()
+                    except OSError:
+                        pass
+                
+                if subdir is not None and subdir.exists():
+                    try:
+                        subdir.rmdir()
+                    except OSError:
+                        pass
 
     @settings(max_examples=100)
     @given(path_parts=st.lists(safe_path_component(), min_size=1, max_size=3))
@@ -443,7 +463,7 @@ class TestPathContainment:
             handler = SafePathHandler(temp_base_dir)
             
             # Create a path outside base directory
-            outside_path = Path("/tmp") / component
+            outside_path = Path(tempfile.gettempdir()) / component
             
             # Skip if /tmp happens to be our base (unlikely but possible)
             assume(not str(outside_path.resolve()).startswith(str(temp_base_dir.resolve())))
@@ -1102,6 +1122,26 @@ class TestAtomicWriteOperations:
                 "File should contain new content after atomic write"
             )
 
+    @settings(max_examples=20)
+    @given(data=st.data())
+    def test_verify_outside_base_generator(self, data):
+        """
+        Verify that absolute_path_outside_base generator produces valid outside paths.
+        """
+        with temp_base_directory() as temp_base_dir:
+            # We must pass base_dir as a string because of the type hint/usage in generator
+            path = data.draw(absolute_path_outside_base(base_dir=str(temp_base_dir)))
+            
+            path_obj = Path(path)
+            assert path_obj.is_absolute()
+            
+            # Should NOT be relative to temp_base_dir
+            try:
+                path_obj.relative_to(temp_base_dir)
+                pytest.fail(f"Generated path {path} should be outside {temp_base_dir}")
+            except ValueError:
+                pass
+
     def test_atomic_write_creates_parent_directories(self):
         """
         Test that atomic_write() creates parent directories if needed.
@@ -1149,8 +1189,9 @@ class TestAtomicWriteOperations:
         with temp_base_directory() as temp_base_dir:
             handler = SafePathHandler(temp_base_dir)
 
-            outside_path = Path("/tmp/outside_base_test.txt")
-            content = b"Should not be written"
+            # Use parent directory to ensure it is outside base
+            outside_path = temp_base_dir.parent / "outside_base_test.txt"
+            content = b"Content should not be written"
 
             with pytest.raises(PathTraversalError):
                 handler.atomic_write(outside_path, content)
@@ -1212,7 +1253,7 @@ class TestAtomicWriteOperations:
 
         **Validates: Requirements 5.5**
         """
-        import unittest.mock as mock
+
 
         with temp_base_directory() as temp_base_dir:
             handler = SafePathHandler(temp_base_dir)
@@ -1239,7 +1280,7 @@ class TestAtomicWriteOperations:
 
         **Validates: Requirements 5.5**
         """
-        import unittest.mock as mock
+
 
         with temp_base_directory() as temp_base_dir:
             handler = SafePathHandler(temp_base_dir)
@@ -1266,7 +1307,7 @@ class TestAtomicWriteOperations:
 
         **Validates: Requirements 5.5**
         """
-        import unittest.mock as mock
+
 
         with temp_base_directory() as temp_base_dir:
             handler = SafePathHandler(temp_base_dir)

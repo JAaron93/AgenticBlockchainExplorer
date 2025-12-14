@@ -3,7 +3,7 @@
   "$id": "https://stablecoin-explorer/schemas/polygonscan/tokenholderlist.json",
   "title": "Polygonscan Token Holder List Response",
   "description": "JSON Schema for Polygonscan tokenholderlist API endpoint response",
-  "version": "1.0.0",
+  "$comment": "Version 1.0.0. Strict root to enforce API envelope.",
   "type": "object",
   "required": ["status", "message", "result"],
   "properties": {
@@ -23,7 +23,8 @@
           "items": {
             "$ref": "#/definitions/tokenHolder"
           },
-          "maxItems": 10000
+          "maxItems": 10000,
+          "$comment": "Empty arrays are valid if no holders are returned but the call was successful."
         },
         {
           "type": "string",
@@ -51,7 +52,8 @@
           "description": "Token balance in smallest unit"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": true,
+      "$comment": "Intentionally true for forward compatibility."
     }
   },
   "additionalProperties": false

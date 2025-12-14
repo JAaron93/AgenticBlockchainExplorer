@@ -131,6 +131,7 @@ class ResponseSchemaValidator:
         self._lock = threading.RLock()
         
         # Metrics counters
+        self._metrics_lock = threading.Lock()
         self._validation_failures = 0
         self._permissive_fallback_used = 0
         
@@ -273,7 +274,8 @@ class ResponseSchemaValidator:
         
         # Check nesting depth first
         if not self._check_nesting_depth(response):
-            self._validation_failures += 1
+            with self._metrics_lock:
+                self._validation_failures += 1
             return ValidationResult(
                 is_valid=False,
                 errors=["Response nesting depth exceeds maximum allowed"],
@@ -281,17 +283,15 @@ class ResponseSchemaValidator:
                 nesting_depth_exceeded=True,
             )
         
-        # Get schema
+        # Get schema and version atomically
         with self._lock:
             schema = self._get_schema(explorer, endpoint)
-        
+            schema_version = self._schema_versions.get(explorer, {}).get(
+                endpoint, "unknown"
+            )
+
         if schema is None:
             return self._handle_missing_schema(explorer, endpoint)
-        
-        # Get schema version for result
-        schema_version = self._schema_versions.get(explorer, {}).get(
-            endpoint, "unknown"
-        )
         
         # Perform validation
         if not JSONSCHEMA_AVAILABLE:
@@ -339,7 +339,8 @@ class ResponseSchemaValidator:
         is_valid = len(errors) == 0
         
         if not is_valid:
-            self._validation_failures += 1
+            with self._metrics_lock:
+                self._validation_failures += 1
             logger.warning(
                 f"Schema validation failed: {len(errors)} errors at "
                 f"paths: {', '.join(field_paths[:5])}"
@@ -426,33 +427,31 @@ class ResponseSchemaValidator:
         # Generic fallback - don't include the actual value
         return f"Validation error at {path}: {validator} constraint violated"
     
-    def _check_nesting_depth(
-        self,
-        obj: Any,
-        current_depth: int = 0,
-    ) -> bool:
+    def _check_nesting_depth(self, obj: Any) -> bool:
         """Check if object nesting exceeds MAX_NESTING_DEPTH.
         
         Args:
             obj: Object to check
-            current_depth: Current nesting level
             
         Returns:
             True if within limits, False if exceeded
             
         Requirements: 4.8 (max nesting depth 10 levels)
         """
-        if current_depth > self.MAX_NESTING_DEPTH:
-            return False
+        stack = [(obj, 0)]
         
-        if isinstance(obj, dict):
-            for value in obj.values():
-                if not self._check_nesting_depth(value, current_depth + 1):
-                    return False
-        elif isinstance(obj, list):
-            for item in obj:
-                if not self._check_nesting_depth(item, current_depth + 1):
-                    return False
+        while stack:
+            current_obj, depth = stack.pop()
+            
+            if depth > self.MAX_NESTING_DEPTH:
+                return False
+            
+            if isinstance(current_obj, dict):
+                for value in current_obj.values():
+                    stack.append((value, depth + 1))
+            elif isinstance(current_obj, list):
+                for item in current_obj:
+                    stack.append((item, depth + 1))
         
         return True
     
@@ -492,7 +491,8 @@ class ResponseSchemaValidator:
         Requirements: 4.17, 4.18
         """
         if self._fallback_strategy == SchemaFallbackStrategy.FAIL_CLOSED:
-            self._validation_failures += 1
+            with self._metrics_lock:
+                self._validation_failures += 1
             return ValidationResult(
                 is_valid=False,
                 errors=[
@@ -513,7 +513,8 @@ class ResponseSchemaValidator:
             )
         
         # PERMISSIVE_DEFAULT - use minimal schema
-        self._permissive_fallback_used += 1
+        with self._metrics_lock:
+            self._permissive_fallback_used += 1
         logger.warning(
             f"No schema for {explorer}/{endpoint}, using permissive default"
         )
@@ -643,12 +644,14 @@ class ResponseSchemaValidator:
     @property
     def validation_failures(self) -> int:
         """Get count of validation failures."""
-        return self._validation_failures
+        with self._metrics_lock:
+            return self._validation_failures
     
     @property
     def permissive_fallback_used(self) -> int:
         """Get count of permissive fallback uses."""
-        return self._permissive_fallback_used
+        with self._metrics_lock:
+            return self._permissive_fallback_used
     
     @property
     def loaded_schemas(self) -> Dict[str, List[str]]:

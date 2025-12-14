@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from email.utils import format_datetime
 
+import pytest
 from core.security.circuit_breaker import ExponentialBackoff
 
 
@@ -180,44 +181,31 @@ class TestExponentialBackoffHeaderHonoring:
         # Should be approximately 60 seconds (allow some tolerance)
         assert 58.0 <= delay <= 62.0
 
-    def test_uses_larger_delay_when_both_headers_present(self):
+    @pytest.mark.parametrize(
+        "retry_after, reset_offset, expected_min, expected_max",
+        [
+            ("30", 60, 58.0, 62.0),   # Reset is larger (60s vs 30s)
+            ("90", 30, 90.0, 90.0),   # Retry-After is larger (90s vs 30s)
+        ],
+    )
+    def test_uses_larger_delay_when_both_headers_present(
+        self, retry_after, reset_offset, expected_min, expected_max
+    ):
         """When both headers present, uses larger delay (stricter limit)."""
         backoff = ExponentialBackoff(
             base_delay=1.0,
             jitter_factor=0.0,
         )
 
-        # Retry-After: 30 seconds
-        # X-RateLimit-Reset: 60 seconds in future
-        future_timestamp = time.time() + 60
+        future_timestamp = time.time() + reset_offset
 
         delay = backoff.get_delay_honoring_headers(
             attempt=0,
-            retry_after="30",
+            retry_after=retry_after,
             rate_limit_reset=str(future_timestamp),
         )
 
-        # Should use the larger value (60 seconds)
-        assert 58.0 <= delay <= 62.0
-    def test_uses_larger_of_both_headers(self):
-        """When both headers present with different values, uses larger."""
-        backoff = ExponentialBackoff(
-            base_delay=1.0,
-            jitter_factor=0.0,
-        )
-
-        # Retry-After: 90 seconds (larger)
-        # X-RateLimit-Reset: 30 seconds in future
-        future_timestamp = time.time() + 30
-
-        delay = backoff.get_delay_honoring_headers(
-            attempt=0,
-            retry_after="90",
-            rate_limit_reset=str(future_timestamp),
-        )
-
-        # Should use the larger value (90 seconds)
-        assert delay == 90.0
+        assert expected_min <= delay <= expected_max
 
     def test_fallback_to_exponential_when_no_headers(self):
         """Falls back to exponential backoff when no headers provided."""

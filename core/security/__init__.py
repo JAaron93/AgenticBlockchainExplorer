@@ -13,9 +13,9 @@ Currently implemented:
 - ExponentialBackoff: Exponential backoff with jitter for retries
 - BlockchainDataValidator: Validates blockchain data formats
 - TimeoutManager: Manages hierarchical timeouts for agent runs
+- Schema validation: Validates API responses against defined schemas
 
 Additional components will be added as the security hardening spec progresses:
-- Schema validation
 - Secure HTTP client
 """
 
@@ -63,7 +63,7 @@ from core.security.safe_path_handler import (
 from core.security.timeout_manager import (
     CollectionTimeoutError,
     OverallTimeoutError,
-    TimeoutError,
+    AgentTimeoutError,
     TimeoutManager,
 )
 from core.security.schema_validator import (
@@ -115,7 +115,7 @@ __all__ = [
     # Timeout management
     "CollectionTimeoutError",
     "OverallTimeoutError",
-    "TimeoutError",
+    "AgentTimeoutError",
     "TimeoutManager",
     # Schema validation
     "ResponseSchemaValidator",

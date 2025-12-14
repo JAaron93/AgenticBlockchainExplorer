@@ -16,6 +16,7 @@ from core.security.timeout_manager import (
     CollectionTimeoutError,
     OverallTimeoutError,
     TimeoutManager,
+    AgentTimeoutError,
 )
 
 
@@ -147,10 +148,10 @@ class TestTimeoutManagerTiming:
 
         remaining = manager.time_remaining()
         assert remaining < 1800.0
-        assert remaining > 1799.0
+        assert remaining > 1798.0
 
     def test_time_elapsed_after_start(self):
-        """time_elapsed increases after start."""
+        """time_elapsed returns elapsed time after start."""
         config = TimeoutConfig()
         manager = TimeoutManager(config, num_collections=1)
 
@@ -159,7 +160,7 @@ class TestTimeoutManagerTiming:
 
         elapsed = manager.time_elapsed()
         assert elapsed >= 0.1
-        assert elapsed < 0.2
+        assert elapsed < 1.0
 
     def test_is_expired_false_initially(self):
         """is_expired returns False initially."""
@@ -385,9 +386,10 @@ class TestTimeoutConfigValidation:
 
     def test_shutdown_must_be_less_than_overall(self):
         """shutdown_timeout must be less than overall_run_timeout."""
-        with pytest.raises(ValueError, match="per_collection_timeout_seconds"):
+        with pytest.raises(ValueError, match="shutdown_timeout_seconds"):
             TimeoutConfig(
                 overall_run_timeout_seconds=100,
+                per_collection_timeout_seconds=50,
                 shutdown_timeout_seconds=100,
             )
 

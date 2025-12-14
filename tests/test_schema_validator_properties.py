@@ -10,7 +10,7 @@ design document.
 from pathlib import Path
 from typing import Any, Dict, List
 
-from hypothesis import given, strategies as st, settings, assume
+from hypothesis import given, strategies as st, settings
 
 from core.security.schema_validator import (
     ResponseSchemaValidator,
@@ -186,7 +186,9 @@ class TestSchemaValidationRejectsInvalidStructure:
     def setup_class(cls):
         """Set up validator with loaded schemas."""
         cls.validator = ResponseSchemaValidator(
-            schema_directory=Path("schemas"),
+            # Resolve schemas directory relative to this test file
+            # tests/test_schema_validator_properties.py -> ../schemas
+            schema_directory=Path(__file__).resolve().parent.parent / "schemas",
             fallback_strategy=SchemaFallbackStrategy.FAIL_CLOSED,
         )
         cls.validator.load_schemas()
@@ -348,18 +350,42 @@ class TestSchemaValidationRejectsInvalidStructure:
         **Validates: Requirements 4.8, 4.9**
         """
         # Create an invalid response by removing a required field
-        if "status" in response:
-            del response["status"]
+        response = response.copy()
+        response.pop("status", None)
 
         result = self.validator.validate(response, "etherscan", "tokentx")
 
         # Check that errors don't contain raw values
+        # Check that errors don't contain raw values
+        raw_values = []
+        
+        # Collect potential raw values from response (strings > 5 chars)
+        def collect_strings(obj):
+            if isinstance(obj, str):
+                if len(obj) > 5:
+                    raw_values.append(obj)
+            elif isinstance(obj, dict):
+                for v in obj.values():
+                    collect_strings(v)
+            elif isinstance(obj, list):
+                for item in obj:
+                    collect_strings(item)
+                    
+        collect_strings(response)
+        
         for error in result.errors:
-            # Error messages should reference paths, not contain raw data
+            # Error messages should reference paths
             assert "Missing required" in error or "Invalid" in error or \
                    "Validation error" in error, (
                 f"Unexpected error format: {error}"
             )
+            
+            # Error messages should NOT contain raw data
+            for val in raw_values:
+                assert val not in error, (
+                    f"Sensitive data leaked in error message! Found value '{val}' "
+                    f"in error: '{error}'"
+                )
 
     @settings(max_examples=100)
     @given(response=valid_tokentx_response())

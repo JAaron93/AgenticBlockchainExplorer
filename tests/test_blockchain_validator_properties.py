@@ -7,6 +7,7 @@ These tests use Hypothesis to verify correctness properties defined in the desig
 """
 
 import re
+import logging
 
 from hypothesis import given, strategies as st, settings
 
@@ -215,7 +216,7 @@ class TestAddressValidationCorrectness:
         
         **Validates: Requirements 4.1**
         """
-        import re
+
         
         validator = BlockchainDataValidator()
         pattern = re.compile(r"^0x[a-fA-F0-9]{40}$")
@@ -1358,7 +1359,7 @@ class TestValidationErrorHandling:
 
         **Validates: Requirements 4.4**
         """
-        import logging
+
 
         validator = BlockchainDataValidator()
 
@@ -1394,7 +1395,7 @@ class TestValidationErrorHandling:
 
         **Validates: Requirements 4.4**
         """
-        import logging
+
 
         validator = BlockchainDataValidator()
         invalid_address = "0xATTACKER_PAYLOAD_HERE"
@@ -1420,7 +1421,7 @@ class TestValidationErrorHandling:
 
         **Validates: Requirements 4.4**
         """
-        import logging
+
 
         validator = BlockchainDataValidator()
         invalid_hash = "0xSENSITIVE_TRANSACTION_DATA"
@@ -1441,7 +1442,7 @@ class TestValidationErrorHandling:
 
         **Validates: Requirements 4.4**
         """
-        import logging
+
 
         validator = BlockchainDataValidator()
         invalid_amount = "SECRET_BALANCE_999999"
@@ -1462,7 +1463,7 @@ class TestValidationErrorHandling:
 
         **Validates: Requirements 4.4**
         """
-        import logging
+
 
         validator = BlockchainDataValidator()
         # Timestamp before genesis
@@ -1485,7 +1486,7 @@ class TestValidationErrorHandling:
 
         **Validates: Requirements 4.4**
         """
-        import logging
+
 
         validator = BlockchainDataValidator()
         invalid_block = -999
@@ -1506,7 +1507,7 @@ class TestValidationErrorHandling:
 
         **Validates: Requirements 4.4**
         """
-        import logging
+
         import time
 
         validator = BlockchainDataValidator()
@@ -1605,7 +1606,7 @@ class TestValidationErrorHandling:
 
         **Validates: Requirements 4.4**
         """
-        import logging
+
 
         validator = BlockchainDataValidator()
 
@@ -1617,3 +1618,10 @@ class TestValidationErrorHandling:
         assert results[0].is_valid is False
         assert results[0].field_name == "timestamp"
         assert "chain" in results[0].error_message.lower()
+
+        # Verify warning was logged
+        warning_records = [
+            r for r in caplog.records if r.levelno == logging.WARNING
+        ]
+        assert len(warning_records) == 1
+        assert "timestamp" in warning_records[0].message

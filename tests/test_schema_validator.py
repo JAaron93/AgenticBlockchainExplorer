@@ -7,8 +7,7 @@ valid and invalid API responses.
 Requirements: 4.8, 4.9
 """
 
-import json
-import tempfile
+from pathlib import Path
 from pathlib import Path
 
 import pytest
