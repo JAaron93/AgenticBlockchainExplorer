@@ -13,7 +13,7 @@ import logging
 import tempfile
 import uuid
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
@@ -151,7 +151,7 @@ class GracefulTerminator:
 
         Requirements: 3.7, 3.8, 3.9, 3.10
         """
-        termination_start = datetime.utcnow()
+        termination_start = datetime.now(timezone.utc)
 
         # Calculate duration
         if self._start_time:
@@ -258,7 +258,7 @@ class GracefulTerminator:
         self._output_directory.mkdir(parents=True, exist_ok=True)
 
         # Convert results to output format
-        timestamp = datetime.utcnow().isoformat() + "Z"
+        timestamp = datetime.now(timezone.utc).isoformat() + "Z"
         output_data: List[Dict[str, Any]] = []
         total_records = 0
 

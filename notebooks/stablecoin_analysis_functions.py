@@ -630,11 +630,11 @@ def analyze_time_series(
     elif aggregation == "weekly":
         # Use Monday as start of week
         work_df['period'] = (
-            work_df['timestamp'].dt.to_period('W-MON').dt.start_time.dt.date
+            work_df['timestamp'].dt.tz_convert(None).dt.to_period('W-MON').dt.start_time.dt.date
         )
     elif aggregation == "monthly":
         work_df['period'] = (
-            work_df['timestamp'].dt.to_period('M').dt.start_time.dt.date
+            work_df['timestamp'].dt.tz_convert(None).dt.to_period('M').dt.start_time.dt.date
         )
 
     # Group by period, activity_type, and stablecoin
@@ -770,11 +770,11 @@ def aggregate_time_series_by_activity(
         work_df['period'] = work_df['timestamp'].dt.date
     elif aggregation == "weekly":
         work_df['period'] = (
-            work_df['timestamp'].dt.to_period('W-MON').dt.start_time.dt.date
+            work_df['timestamp'].dt.tz_convert(None).dt.to_period('W-MON').dt.start_time.dt.date
         )
     elif aggregation == "monthly":
         work_df['period'] = (
-            work_df['timestamp'].dt.to_period('M').dt.start_time.dt.date
+            work_df['timestamp'].dt.tz_convert(None).dt.to_period('M').dt.start_time.dt.date
         )
 
     # Group by period and activity_type
@@ -835,11 +835,11 @@ def aggregate_time_series_by_stablecoin(
         work_df['period'] = work_df['timestamp'].dt.date
     elif aggregation == "weekly":
         work_df['period'] = (
-            work_df['timestamp'].dt.to_period('W-MON').dt.start_time.dt.date
+            work_df['timestamp'].dt.tz_convert(None).dt.to_period('W-MON').dt.start_time.dt.date
         )
     elif aggregation == "monthly":
         work_df['period'] = (
-            work_df['timestamp'].dt.to_period('M').dt.start_time.dt.date
+            work_df['timestamp'].dt.tz_convert(None).dt.to_period('M').dt.start_time.dt.date
         )
 
     # Group by period and stablecoin

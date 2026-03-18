@@ -107,7 +107,7 @@ class TestTimeoutBehavior:
             output_directory=tmp_path,
         )
         terminator.set_run_id("test_run_123")
-        terminator.set_start_time(datetime.utcnow())
+        terminator.set_start_time(datetime.now(timezone.utc))
         
         # Create partial results
         partial_results = [

@@ -12,7 +12,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from config.models import Config, ExplorerConfig, TimeoutConfig
@@ -632,7 +632,7 @@ class AgentOrchestrator:
         Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6
         """
         start_time = time.time()
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc)
         self._partial_results = []
         
         # Set run_id in logging context for correlation

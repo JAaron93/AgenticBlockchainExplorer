@@ -102,7 +102,7 @@ class TestAuthEndpoints:
         test_app.dependency_overrides[get_auth0_manager] = lambda: mock_auth0
 
         client = TestClient(test_app, raise_server_exceptions=False)
-        response = client.get("/login", allow_redirects=False)
+        response = client.get("/login", follow_redirects=False)
 
         assert response.status_code == 302
         assert "auth0.com" in response.headers.get("location", "")
@@ -115,7 +115,7 @@ class TestAuthEndpoints:
         test_app.dependency_overrides[get_auth0_manager] = lambda: mock_auth0
 
         client = TestClient(test_app, raise_server_exceptions=False)
-        response = client.get("/logout", allow_redirects=False)
+        response = client.get("/logout", follow_redirects=False)
 
         assert response.status_code == 302
         assert "logout" in response.headers.get("location", "")

@@ -75,7 +75,7 @@ class TestCascadeFailures:
         )
         terminator.set_run_id("cascade_test")
         # Use naive datetime to match the implementation
-        terminator.set_start_time(datetime.utcnow())
+        terminator.set_start_time(datetime.now(timezone.utc))
         
         # Create partial results from multiple explorers
         partial_results = [
@@ -474,7 +474,7 @@ class TestGracefulTerminatorEdgeCases:
         )
         terminator.set_run_id("empty_test")
         # Use naive datetime to match the implementation
-        terminator.set_start_time(datetime.utcnow())
+        terminator.set_start_time(datetime.now(timezone.utc))
         
         # Terminate with empty results
         report = await terminator.terminate(
@@ -501,7 +501,7 @@ class TestGracefulTerminatorEdgeCases:
         )
         terminator.set_run_id("cancel_test")
         # Use naive datetime to match the implementation
-        terminator.set_start_time(datetime.utcnow())
+        terminator.set_start_time(datetime.now(timezone.utc))
         
         # Create some pending tasks
         async def long_running():
@@ -535,7 +535,7 @@ class TestGracefulTerminatorEdgeCases:
         )
         terminator.set_run_id("flush_timeout_test")
         # Use naive datetime to match the implementation
-        terminator.set_start_time(datetime.utcnow())
+        terminator.set_start_time(datetime.now(timezone.utc))
         
         # Create large partial results
         partial_results = [

@@ -11,7 +11,7 @@ Requirements: 3.7, 3.8, 3.9, 3.10
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, List
@@ -356,7 +356,7 @@ class TestPartialResultPersistence:
         SHALL flush and write any in-progress results atomically to output
         with a "partial" status flag in metadata.
         """
-        terminator.set_start_time(datetime.utcnow())
+        terminator.set_start_time(datetime.now(timezone.utc))
         
         report = await terminator.terminate(
             reason="overall_timeout",
@@ -428,7 +428,7 @@ class TestTerminationLogging:
         SHALL record a structured log entry with termination reason, timestamp,
         records collected, and summary of persisted data.
         """
-        terminator.set_start_time(datetime.utcnow())
+        terminator.set_start_time(datetime.now(timezone.utc))
         
         with caplog.at_level(logging.INFO):
             await terminator.terminate(
@@ -487,7 +487,7 @@ class TestTerminationLogging:
         SHALL record a structured log entry with termination reason, timestamp,
         records collected, and summary of persisted data.
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         terminator.set_start_time(start_time)
         
         report = await terminator.terminate(
@@ -596,7 +596,7 @@ class TestTerminationReport:
         """Test TerminationReport creation."""
         report = TerminationReport(
             reason="timeout",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             records_collected=100,
             records_persisted=95,
             output_file="/path/to/output.json",
@@ -613,7 +613,7 @@ class TestTerminationReport:
         """Test TerminationReport with no output file."""
         report = TerminationReport(
             reason="no_data",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             records_collected=0,
             records_persisted=0,
             output_file=None,
@@ -642,7 +642,7 @@ class TestGracefulTerminatorIntegration:
             output_directory=temp_output_dir,
         )
         terminator.set_run_id("test-run-123")
-        terminator.set_start_time(datetime.utcnow())
+        terminator.set_start_time(datetime.now(timezone.utc))
         
         # Create some pending tasks
         async def api_request() -> None:

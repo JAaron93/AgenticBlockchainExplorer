@@ -150,9 +150,9 @@ fi
 echo "Starting master pipeline at $(date)" >> "${LOG_FILE}"
 python -c "
 from pipelines.master_pipeline import run_master_pipeline
-from datetime import datetime
+from datetime import datetime, timezone
 
-print(f'Pipeline started at {datetime.utcnow().isoformat()}')
+print(f'Pipeline started at {datetime.now(timezone.utc).isoformat()}')
 result = run_master_pipeline(
     stablecoins=['USDC', 'USDT'],
     date_range_days=7,
@@ -162,7 +162,7 @@ result = run_master_pipeline(
     top_n_holders=10,
     run_ml_inference=True,
 )
-print(f'Pipeline completed at {datetime.utcnow().isoformat()}')
+print(f'Pipeline completed at {datetime.now(timezone.utc).isoformat()}')
 " >> "${LOG_FILE}" 2>&1
 
 # Check exit status
