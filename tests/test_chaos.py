@@ -74,7 +74,7 @@ class TestCascadeFailures:
             output_directory=tmp_path,
         )
         terminator.set_run_id("cascade_test")
-        # Use naive datetime to match the implementation
+        # Use timezone-aware UTC datetime
         terminator.set_start_time(datetime.now(timezone.utc))
         
         # Create partial results from multiple explorers

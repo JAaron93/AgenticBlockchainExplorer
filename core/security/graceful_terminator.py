@@ -10,6 +10,7 @@ Requirements: 3.7, 3.8, 3.9, 3.10
 import asyncio
 import json
 import logging
+import os
 import tempfile
 import uuid
 from dataclasses import asdict
@@ -258,7 +259,7 @@ class GracefulTerminator:
         self._output_directory.mkdir(parents=True, exist_ok=True)
 
         # Convert results to output format
-        timestamp = datetime.now(timezone.utc).isoformat() + "Z"
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         output_data: List[Dict[str, Any]] = []
         total_records = 0
 
@@ -305,6 +306,16 @@ class GracefulTerminator:
             path: Target file path.
             data: Data to write as JSON.
         """
+        # Offload blocking I/O to a thread (Requirement 3.8, 3.9)
+        await asyncio.to_thread(self._sync_write, path, data)
+
+    def _sync_write(self, path: Path, data: List[Dict[str, Any]]) -> None:
+        """Synchronous worker for atomic write operations.
+
+        Args:
+            path: Target file path.
+            data: Data to write as JSON.
+        """
         # Create temp file in same directory for atomic rename
         temp_fd, temp_path = tempfile.mkstemp(
             dir=path.parent,
@@ -315,13 +326,19 @@ class GracefulTerminator:
         try:
             # Write to temp file
             content = json.dumps(data, indent=2, default=str)
-            with open(temp_fd, "w", encoding="utf-8") as f:
+            with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 f.write(content)
 
             # Atomic rename
             Path(temp_path).rename(path)
 
         except Exception:
+            # Ensure file descriptor is closed if not already handled by fdopen
+            try:
+                os.close(temp_fd)
+            except OSError:
+                pass
+
             # Clean up temp file on error
             try:
                 Path(temp_path).unlink()

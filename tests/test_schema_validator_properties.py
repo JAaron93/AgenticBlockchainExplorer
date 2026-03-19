@@ -151,14 +151,16 @@ def transfer_with_invalid_hash(draw):
     return transfer
 
 
-def deeply_nested_object(depth: int = 15):
+@st.composite
+def deeply_nested_object(draw, min_depth: int = 11, max_depth: int = 30):
     """Generate an object with excessive nesting depth."""
+    depth = draw(st.integers(min_value=min_depth, max_value=max_depth))
     obj: Dict[str, Any] = {"status": "1", "message": "OK", "result": []}
     current = obj
     for i in range(depth):
         current["nested"] = {"level": i}
         current = current["nested"]
-    return st.just(obj)
+    return obj
 
 
 # =============================================================================
