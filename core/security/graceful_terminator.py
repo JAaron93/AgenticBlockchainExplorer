@@ -307,7 +307,11 @@ class GracefulTerminator:
             data: Data to write as JSON.
         """
         # Offload blocking I/O to a thread (Requirement 3.8, 3.9)
-        await asyncio.to_thread(self._sync_write, path, data)
+        if hasattr(asyncio, "to_thread"):
+            await asyncio.to_thread(self._sync_write, path, data)
+        else:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._sync_write, path, data)
 
     def _sync_write(self, path: Path, data: List[Dict[str, Any]]) -> None:
         """Synchronous worker for atomic write operations.

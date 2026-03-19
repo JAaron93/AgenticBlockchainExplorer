@@ -19,14 +19,14 @@ This guide walks you through setting up the Blockchain Stablecoin Explorer from 
 
 Before starting, ensure you have the following installed:
 
-- **Python 3.9+** - [Download Python](https://www.python.org/downloads/)
+- **Python 3.10+** - [Download Python](https://www.python.org/downloads/)
 - **PostgreSQL 12+** - [Download PostgreSQL](https://www.postgresql.org/download/)
 - **Git** - [Download Git](https://git-scm.com/downloads)
 
 Verify installations:
 
 ```bash
-python --version   # Should be 3.9 or higher
+python --version   # Should be 3.10 or higher
 psql --version     # Should be 12 or higher
 git --version
 ```

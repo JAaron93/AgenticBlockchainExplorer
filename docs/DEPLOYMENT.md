@@ -4,7 +4,7 @@ This guide covers deploying the stablecoin analysis notebook to a live website w
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - ZenML installed and configured
 - Access to blockchain explorer APIs (Etherscan, BscScan, Polygonscan)
 - Web server for hosting static exports

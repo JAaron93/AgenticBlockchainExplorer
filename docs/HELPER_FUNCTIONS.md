@@ -1,0 +1,76 @@
+# AgenticBlockchainExplorer Helper Functions
+
+This document outlines the shared helper functions and base classes created during the DRY refactoring efforts to improve maintainability and avoid code duplication.
+
+## 1. Collector Layer Refactor (`collectors/base.py`)
+
+To eliminate duplicate logic across `EtherscanCollector`, `BscscanCollector`, and `PolygonscanCollector`, core methods for data extraction, parsing, and aggregation were moved to the `ExplorerCollector` base class.
+
+### Available Base Class Methods
+
+- **`fetch_stablecoin_transactions(stablecoin, contract_address, limit, run_id)`**
+  Coordinates fetching `tokenTx` API actions for ERC-20 compliant tokens. Handles pagination, mapping, and error checking natively.
+
+- **`fetch_token_holders(stablecoin, contract_address, limit, run_id)`**
+  Coordinates fetching the `tokenholderlist` endpoint. Handles missing token handlers (graceful degradation) natively.
+
+- **`_parse_transaction(tx_data, stablecoin)`**
+  Parses raw blockchain transaction data into the Pydantic `Transaction` model. Performs `BlockchainDataValidator` checks on the data when available.
+
+- **`_parse_holder(holder_data, stablecoin, contract_address)`**
+  Similar to `_parse_transaction`, validates raw token holder lists and parses valid entries into `Holder` records.
+
+- **`_parse_amount(value_str, stablecoin)`**
+  Uses the sub-class's native `TOKEN_DECIMALS` mapping to safely convert `value` strings to parsed `Decimal` units.
+
+- **`_parse_timestamp(timestamp_str)`**
+  Resolves UTC timezone-aware datetimes natively.
+
+- **`_classify_activity(from_address, to_address, amount)`**
+  Evaluates source/destination hashes (`0x000..000`) to infer Minting/Burning vs. Standard transfer behavior.
+
+### Usage in Subclasses
+
+When creating a new blockchain collector (e.g. `ArbitrumCollector`), inherit from `ExplorerCollector` and configure the `TOKEN_DECIMALS` class mapping:
+
+```python
+from collectors.base import ExplorerCollector
+
+class ArbitrumCollector(ExplorerCollector):
+    TOKEN_DECIMALS = {"USDC": 6, "USDT": 18}
+    
+    def __init__(self, config, retry_config=None):
+        super().__init__(config, retry_config)
+        if config.chain != "arbitrum": ...
+```
+No additional parsing overrides are needed unless the new chain relies on a fundamentally different schema for token transactions.
+
+---
+
+## 2. API Layer Authorization (`api/helpers.py`)
+
+Instead of duplicating database and user ID assertions across every API endpoint, shared dependency helpers wrap native DatabaseManager interactions and authorization rules.
+
+### Available Helper Functions
+
+- **`get_authorized_run(run_id, user, db_manager, action="view") -> AgentRun`**
+  Fetches a database `AgentRun` by its `run_id`. Handles `InvalidUUIDError` and asserts that `run.user_id == user.user_id` or `user.has_permission('admin:config')`. Returns the verified record or raises a fastAPI `HTTPException`.
+
+- **`get_authorized_run_details(run_id, user, db_manager, action="view") -> Dict[str, Any]`**
+  Similar to `get_authorized_run`, but queries the nested dictionary payload inside `db_manager.get_run_details()`.
+
+### Usage in Routes
+
+```python
+from api.helpers import get_authorized_run
+
+@router.get("/{run_id}/status")
+async def get_run_status(
+    run_id: str,
+    user: UserInfo = Depends(require_auth),
+    db_manager: DatabaseManager = Depends(get_db_manager),
+):
+    # This 1-liner replaces 15 lines of repetitive checks mapping 400, 403, and 404 errors:
+    run = await get_authorized_run(run_id, user, db_manager)
+    return StatusResponse(run_id=run.run_id, status=run.status)
+```
