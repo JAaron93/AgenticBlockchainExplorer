@@ -25,7 +25,7 @@ from core.database import init_database, close_database
 from core.logging import configure_logging, get_logger
 
 # Global config reference
-_config: Optional[Config] = None
+_config: Config | None = None
 
 # Deferred logger - will be configured after config is loaded
 logger: logging.Logger | None = None

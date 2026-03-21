@@ -304,6 +304,21 @@ class ModelError(StablecoinExplorerError):
     pass
 
 
+class ModelPersistenceError(ModelError):
+    """Raised when a model fails to be saved/serialized."""
+    
+    def __init__(self, model_name: str, original_error: Optional[Exception] = None):
+        super().__init__(
+            message=f"Failed to persist model '{model_name}'",
+            details={
+                "model_name": model_name,
+                "original_error": str(original_error) if original_error else None,
+            }
+        )
+        self.model_name = model_name
+        self.original_error = original_error
+
+
 class ModelLoadingError(ModelError):
     """Raised when a model fails to load."""
     

@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 from zenml import step
 from core.model_registry import ModelRegistry
+from core.exceptions import ModelPersistenceError
 
 logger = logging.getLogger(__name__)
 
@@ -574,8 +575,11 @@ def train_sov_predictor_step(
         try:
             registry = ModelRegistry()
             registry.save_model("sov_predictor", model, metadata=training_metadata)
-        except (IOError, OSError, ValueError) as reg_err:
+        except (IOError, OSError) as reg_err:
             logger.exception(f"Could not save model to registry due to persistence error: {reg_err}")
+        except ValueError as reg_err:
+            logger.error(f"Invalid model name or identifier for 'sov_predictor': {reg_err}")
+            raise ModelPersistenceError("sov_predictor", reg_err) from reg_err
         except Exception as reg_err:
             logger.exception(f"Unexpected error saving model to registry: {reg_err}")
 

@@ -40,6 +40,10 @@ class ModelRegistry:
         Raises:
             ValueError: If the identifier is empty or contains path separators.
         """
+        if not identifier.strip():
+            raise ValueError(
+                f"Invalid identifier: '{identifier}' is empty or whitespace-only"
+            )
         safe = os.path.basename(identifier)
         if not safe or safe != identifier:
             raise ValueError(
@@ -104,7 +108,11 @@ class ModelRegistry:
             version: Specific version string or 'latest'.
 
         Returns:
-            The loaded model object or None if not found.
+            The loaded model object or None if the model is not found in the registry.
+
+        Raises:
+            ModelLoadingError: If the model file is found but fails to load correctly.
+            ValueError: If the model name or version identifier is invalid.
         """
         # Sanitize inputs
         safe_model_name = self._sanitize_identifier(model_name)

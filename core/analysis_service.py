@@ -83,6 +83,11 @@ class AnalysisService:
 
             logger.info("Applying ML-based SoV predictions to holder data")
             # Map predictions to holders
+            if sov_predictions["address"].duplicated().any():
+                dupes = sov_predictions[sov_predictions["address"].duplicated()]["address"].unique()
+                logger.error(f"Duplicate addresses found in sov_predictions: {dupes}")
+                raise ValueError(f"Duplicate addresses found in sov_predictions: {dupes}")
+
             pred_map = sov_predictions.set_index("address")["prediction"].to_dict()
 
             for holder in holders:

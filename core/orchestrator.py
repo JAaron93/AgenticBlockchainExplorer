@@ -474,14 +474,25 @@ class AgentOrchestrator:
             duration = time.time() - start_time
             error_type = type(e).__name__
             
-            # Check if this is a timeout-related error
-            is_timeout = isinstance(e, TIMEOUT_EXCEPTIONS)
-            
-            # Check nested exceptions if not directly a timeout
-            if not is_timeout:
-                if isinstance(e.__cause__, TIMEOUT_EXCEPTIONS) or \
-                   isinstance(e.__context__, TIMEOUT_EXCEPTIONS):
+            # Check if this is a timeout-related error (Requirement 3.7.1)
+            # Traverse exception chain iteratively to detect wrapped timeouts
+            is_timeout = False
+            stack = [e]
+            visited = set()
+            while stack:
+                curr = stack.pop()
+                if id(curr) in visited:
+                    continue
+                visited.add(id(curr))
+                
+                if isinstance(curr, TIMEOUT_EXCEPTIONS):
                     is_timeout = True
+                    break
+                
+                if curr.__cause__ is not None:
+                    stack.append(curr.__cause__)
+                if curr.__context__ is not None:
+                    stack.append(curr.__context__)
             
             if is_timeout and self._graceful_terminator and self._partial_results:
                 # Handle graceful termination (Requirements 3.7, 3.8, 3.9, 3.10)

@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple, Set
 from collectors.models import Transaction, Holder, ExplorerData, ActivityType
 
 
@@ -146,7 +146,7 @@ class DataAggregator:
         Returns:
             List of unique transactions
         """
-        seen: Dict[tuple[str, str], Transaction] = {}
+        seen: Dict[Tuple[str, str], Transaction] = {}
         duplicates_count = 0
 
         for tx in transactions:
@@ -192,7 +192,7 @@ class DataAggregator:
         Returns:
             List of merged unique holders
         """
-        merged: Dict[tuple[str, str, str], Holder] = {}
+        merged: Dict[Tuple[str, str, str], Holder] = {}
         merges_count = 0
 
         for holder in holders:
@@ -260,7 +260,7 @@ class DataAggregator:
         chain_counts: Dict[str, int] = {}
 
         # Track unique addresses per stablecoin
-        stablecoin_addresses: Dict[str, set[str]] = {}
+        stablecoin_addresses: Dict[str, Set[str]] = {}
 
         # Process transactions - count each transaction toward its chain
         for tx in data.transactions:

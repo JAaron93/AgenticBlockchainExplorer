@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional, Dict, List, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.security.secure_http_client import SecureHTTPClient
@@ -214,7 +214,7 @@ class ExplorerCollector(ABC):
     """
     
     # Token decimals (override in subclasses)
-    TOKEN_DECIMALS: Dict[str, int] = {}
+    TOKEN_DECIMALS: dict[str, int] = {}
 
     def __init__(
         self, config: ExplorerConfig, retry_config: Optional[RetryConfig] = None
@@ -437,7 +437,7 @@ class ExplorerCollector(ABC):
 
     async def _make_request(
         self,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         run_id: Optional[str] = None,
         endpoint: Optional[str] = None,
     ) -> Optional[dict]:
