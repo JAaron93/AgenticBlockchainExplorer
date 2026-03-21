@@ -72,3 +72,11 @@ alembic/versions/*.pyc
 # OS
 .DS_Store
 Thumbs.db
+
+# Project-specific
+models/registry/
+.kiro/
+.coveragerc.bak
+# Local env files
+.env.local
+.env.*.local

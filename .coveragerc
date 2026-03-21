@@ -1,0 +1,23 @@
+[run]
+source = .
+omit =
+    venv/*
+    tests/*
+    */__init__.py
+    setup.py
+    alembic/*
+    .hypothesis/*
+    .kiro/*
+
+[report]
+show_missing = True
+precision = 2
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if __name__ == .__main__.:
+    raise AssertionError
+    raise NotImplementedError
+    if TYPE_CHECKING:
+    @(abc\.)?abstractmethod
