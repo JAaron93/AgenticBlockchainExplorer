@@ -606,10 +606,14 @@ async def download_result(
         from main import get_config
 
         config = get_config()
-        output_dir = Path(config.output.directory).resolve()
-    except (ImportError, ModuleNotFoundError, AttributeError):
-        # Fallback to default if config not available or missing attributes
-        output_dir = Path("./output").resolve()
+     try:
+         from main import get_config
+
+         config = get_config()
+         output_dir = Path(config.output.directory).resolve()
+     except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
+         # Fallback to default if config not available or missing attributes
+         output_dir = Path("./output").resolve()
 
     safe_handler = SafePathHandler(output_dir)
     file_path_str = result["output_file_path"]

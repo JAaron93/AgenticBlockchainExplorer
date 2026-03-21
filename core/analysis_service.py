@@ -58,22 +58,38 @@ class AnalysisService:
         """
         # First apply based heuristic
         for holder in holders:
-            # We track heuristic separately in the model if we wanted to refactor Holder,
-            # but for now we'll just set the main flag and log the source.
+            # We track heuristic separately in the model if we wanted to
+            # refactor Holder, but for now we'll just set the main flag
+            # and log the source.
             self._classifier.classify_holder(holder, transactions)
-            holder.is_sov_heuristic = holder.is_store_of_value # New field if we add it
+            holder.is_sov_heuristic = holder.is_store_of_value  # New field if we add it
 
         # If ML results are available and requested, override heuristic
-        if use_ml_results and sov_predictions is not None and not sov_predictions.empty:
+        if (
+            use_ml_results
+            and sov_predictions is not None
+            and not sov_predictions.empty
+        ):
+            # Validate required columns exist
+            if (
+                "address" not in sov_predictions.columns
+                or "prediction" not in sov_predictions.columns
+            ):
+                logger.warning(
+                    "sov_predictions DataFrame missing required "
+                    "'address' or 'prediction' columns"
+                )
+                return holders
+
             logger.info("Applying ML-based SoV predictions to holder data")
             # Map predictions to holders
             pred_map = sov_predictions.set_index("address")["prediction"].to_dict()
-            
+
             for holder in holders:
                 if holder.address in pred_map:
                     # Update the definitive flag
                     holder.is_store_of_value = bool(pred_map[holder.address])
-                    
+
         return holders
 
     def aggregate_metrics(self, transactions: List[Transaction], holders: List[Holder]) -> dict:
@@ -98,5 +114,6 @@ class AnalysisService:
         """Count occurrences of each activity type."""
         counts = {activity.value: 0 for activity in ActivityType}
         for tx in transactions:
-            counts[tx.activity_type.value] += 1
+            if tx.activity_type is not None:
+                counts[tx.activity_type.value] += 1
         return counts

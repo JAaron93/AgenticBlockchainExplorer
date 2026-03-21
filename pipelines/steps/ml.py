@@ -11,7 +11,7 @@ Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 12.2
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -562,7 +562,7 @@ def train_sov_predictor_step(
         }
         
         logger.info(
-            f"SoV predictor training complete",
+            "SoV predictor training complete",
             extra={
                 "metrics": metrics,
                 "train_samples": len(X_train),
@@ -574,8 +574,10 @@ def train_sov_predictor_step(
         try:
             registry = ModelRegistry()
             registry.save_model("sov_predictor", model, metadata=training_metadata)
+        except (IOError, OSError, ValueError) as reg_err:
+            logger.exception(f"Could not save model to registry due to persistence error: {reg_err}")
         except Exception as reg_err:
-            logger.warning(f"Could not save model to registry: {reg_err}")
+            logger.exception(f"Unexpected error saving model to registry: {reg_err}")
 
         return SoVModelOutput(
             model=model,
@@ -597,7 +599,7 @@ def train_sov_predictor_step(
 @step
 def predict_sov_step(
     features_df: pd.DataFrame,
-    model: Any,
+    model: Union[None, str, Any],
 ) -> SoVPredictionOutput:
     """ZenML step to run SoV prediction inference.
     
@@ -620,7 +622,8 @@ def predict_sov_step(
     try:
         # Load model from registry if not provided or provided as a string/path
         if model is None or isinstance(model, str):
-            model_name = model if isinstance(model, str) and model else "sov_predictor"
+            model_name = model.strip() if isinstance(model, str) and model.strip() else "sov_predictor"
+
             registry = ModelRegistry()
             loaded_model = registry.load_model(model_name)
             if loaded_model is None:

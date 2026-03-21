@@ -128,7 +128,7 @@ class CollectionService:
             async with collector:
                 return await collector.collect_all(
                     stablecoins=contracts,
-                    max_records=max_records or 1000,
+                    max_records=max_records if max_records is not None else 1000,
                     run_id=run_id
                 )
 

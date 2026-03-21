@@ -54,7 +54,9 @@ class ServiceConnectionError(NetworkError):
             message=f"Connection to {service} failed: {message}",
             details={
                 "service": service,
-                "original_error": str(original_error) if original_error else None,
+                "original_error": (
+                    str(original_error) if original_error else None
+                ),
             }
         )
         self.service = service
@@ -293,3 +295,25 @@ class PermissionDeniedError(AuthenticationError):
             }
         )
         self.required_permission = required_permission
+
+
+# ==================== Model Errors ====================
+
+class ModelError(StablecoinExplorerError):
+    """Base exception for model-related errors."""
+    pass
+
+
+class ModelLoadingError(ModelError):
+    """Raised when a model fails to load."""
+    
+    def __init__(self, model_name: str, original_error: Optional[Exception] = None):
+        super().__init__(
+            message=f"Failed to load model '{model_name}'",
+            details={
+                "model_name": model_name,
+                "original_error": str(original_error) if original_error else None,
+            }
+        )
+        self.model_name = model_name
+        self.original_error = original_error
