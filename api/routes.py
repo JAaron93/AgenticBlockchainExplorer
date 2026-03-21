@@ -602,18 +602,13 @@ async def download_result(
     # Path resolution and sanitization for security
     from core.security.safe_path_handler import SafePathHandler
 
+    from main import get_config
     try:
-        from main import get_config
-
         config = get_config()
-     try:
-         from main import get_config
-
-         config = get_config()
-         output_dir = Path(config.output.directory).resolve()
-     except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
-         # Fallback to default if config not available or missing attributes
-         output_dir = Path("./output").resolve()
+        output_dir = Path(config.output.directory).resolve()
+    except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
+        # Fallback to default if config not available or missing attributes
+        output_dir = Path("./output").resolve()
 
     safe_handler = SafePathHandler(output_dir)
     file_path_str = result["output_file_path"]

@@ -51,4 +51,5 @@ def get_config(
 def reset_config() -> None:
     """Reset the singleton configuration (for testing)."""
     global _config
-    _config = None
+    with _config_lock:
+        _config = None

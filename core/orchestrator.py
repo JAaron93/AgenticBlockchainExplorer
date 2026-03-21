@@ -8,11 +8,12 @@ termination.
 Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6
 """
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, List, Dict, Optional
 
 from config.models import Config, TimeoutConfig
 from core.analysis_service import AnalysisService
@@ -20,6 +21,12 @@ from core.services.collection import CollectionService
 from collectors.aggregator import DataAggregator, AggregatedData
 from collectors.exporter import JSONExporter
 from core.db_manager import DatabaseManager
+from core.security.timeout_manager import AgentTimeoutError
+from collectors.models import ExplorerData
+
+
+# Timeout exceptions for explicit detection
+TIMEOUT_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError, AgentTimeoutError)
 
 
 # Use standard logging - will be configured by core.logging when app starts
@@ -69,10 +76,10 @@ class CollectionReport:
 
     run_id: str
     total_records: int
-    records_by_source: dict[str, int] = field(default_factory=dict)
-    explorers_queried: list[str] = field(default_factory=list)
-    explorers_failed: list[str] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
+    records_by_source: Dict[str, int] = field(default_factory=dict)
+    explorers_queried: List[str] = field(default_factory=list)
+    explorers_failed: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
     duration_seconds: float = 0.0
     output_file_path: Optional[str] = None
 
@@ -81,7 +88,7 @@ class CollectionReport:
         """Check if collection was at least partially successful."""
         return self.total_records > 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert report to dictionary."""
         return {
             "run_id": self.run_id,
@@ -101,8 +108,8 @@ class RunConfig:
     """Run-specific configuration overrides."""
 
     max_records_per_explorer: Optional[int] = None
-    explorers: Optional[list[str]] = None
-    stablecoins: Optional[list[str]] = None
+    explorers: Optional[List[str]] = None
+    stablecoins: Optional[List[str]] = None
 
 
 class AgentOrchestrator:
@@ -253,7 +260,7 @@ class AgentOrchestrator:
                 extra={"run_id": self._run_id, "error": str(e)}
             )
 
-    async def collect_from_all_explorers(self) -> list[ExplorerData]:
+    async def collect_from_all_explorers(self) -> List[ExplorerData]:
         """Collect data from all configured explorers in parallel.
 
         Returns:
@@ -301,7 +308,7 @@ class AgentOrchestrator:
 
     def generate_report(
         self,
-        results: list[ExplorerData],
+        results: List[ExplorerData],
         aggregated: AggregatedData,
         duration: float,
         output_path: Optional[str] = None
@@ -465,10 +472,16 @@ class AgentOrchestrator:
 
         except Exception as e:
             duration = time.time() - start_time
+            error_type = type(e).__name__
             
             # Check if this is a timeout-related error
-            error_type = type(e).__name__
-            is_timeout = "Timeout" in error_type or "timeout" in str(e).lower()
+            is_timeout = isinstance(e, TIMEOUT_EXCEPTIONS)
+            
+            # Check nested exceptions if not directly a timeout
+            if not is_timeout:
+                if isinstance(e.__cause__, TIMEOUT_EXCEPTIONS) or \
+                   isinstance(e.__context__, TIMEOUT_EXCEPTIONS):
+                    is_timeout = True
             
             if is_timeout and self._graceful_terminator and self._partial_results:
                 # Handle graceful termination (Requirements 3.7, 3.8, 3.9, 3.10)

@@ -33,7 +33,7 @@ class InvalidUUIDError(ValueError):
 class InvalidStatusError(ValueError):
     """Raised when an invalid run status is provided."""
 
-    def __init__(self, value: str, valid_statuses: list):
+    def __init__(self, value: str, valid_statuses: List[str]):
         self.value = value
         self.valid_statuses = valid_statuses
         super().__init__(

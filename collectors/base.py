@@ -6,7 +6,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Optional, Dict, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.security.secure_http_client import SecureHTTPClient
+    from core.security.blockchain_validator import BlockchainDataValidator
+    from core.security.schema_validator import ResponseSchemaValidator
 import threading
 
 import aiohttp
@@ -35,7 +40,7 @@ def _get_secure_http_client_lock() -> asyncio.Lock:
     return _secure_http_client_lock
 
 
-async def _get_secure_http_client():
+async def _get_secure_http_client() -> Optional["SecureHTTPClient"]:
     """Get or create the secure HTTP client singleton (async-safe).
 
     Returns None if security components are not available, allowing
@@ -101,20 +106,19 @@ def _get_blockchain_validator_lock() -> asyncio.Lock:
     return _blockchain_validator_lock
 
 
-async def _get_blockchain_validator():
+async def _get_blockchain_validator() -> Optional["BlockchainDataValidator"]:
     """Get or create the blockchain validator singleton."""
     global _blockchain_validator
-    if _blockchain_validator is None:
-        async with _get_blockchain_validator_lock():
-            if _blockchain_validator is None:
-                try:
-                    from core.security.blockchain_validator import BlockchainDataValidator
+    async with _get_blockchain_validator_lock():
+        if _blockchain_validator is None:
+            try:
+                from core.security.blockchain_validator import BlockchainDataValidator
 
-                    _blockchain_validator = BlockchainDataValidator()
-                    logger.debug("BlockchainDataValidator initialized for ExplorerCollector")
-                except Exception as e:
-                    logger.warning(f"Failed to initialize BlockchainDataValidator: {e}")
-                    _blockchain_validator = False  # Mark as failed, don't retry
+                _blockchain_validator = BlockchainDataValidator()
+                logger.debug("BlockchainDataValidator initialized for ExplorerCollector")
+            except Exception as e:
+                logger.warning(f"Failed to initialize BlockchainDataValidator: {e}")
+                _blockchain_validator = False  # Mark as failed, don't retry
     return _blockchain_validator if _blockchain_validator else None
 
 
@@ -165,7 +169,7 @@ def init_collector_locks():
                 logger.debug("Initialized _blockchain_validator_lock")
 
 
-async def _get_schema_validator():
+async def _get_schema_validator() -> Optional["ResponseSchemaValidator"]:
     """Get or create the schema validator singleton (async-safe)."""
     global _schema_validator
     async with _get_schema_validator_lock():
@@ -210,7 +214,7 @@ class ExplorerCollector(ABC):
     """
     
     # Token decimals (override in subclasses)
-    TOKEN_DECIMALS: dict[str, int] = {}
+    TOKEN_DECIMALS: Dict[str, int] = {}
 
     def __init__(
         self, config: ExplorerConfig, retry_config: Optional[RetryConfig] = None
@@ -433,7 +437,7 @@ class ExplorerCollector(ABC):
 
     async def _make_request(
         self,
-        params: dict[str, Any],
+        params: Dict[str, Any],
         run_id: Optional[str] = None,
         endpoint: Optional[str] = None,
     ) -> Optional[dict]:

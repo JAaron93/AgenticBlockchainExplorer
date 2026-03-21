@@ -5,7 +5,7 @@ Defines the database schema for users, agent_runs, run_results, and audit_logs t
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
@@ -81,7 +81,7 @@ class AgentRun(Base):
     )
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     progress: Mapped[Optional[float]] = mapped_column(nullable=True)
     progress_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -118,7 +118,7 @@ class RunResult(Base):
         ARRAY(Text), nullable=True
     )
     output_file_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    summary: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    summary: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -154,7 +154,7 @@ class AuditLog(Base):
     )
     ip_address: Mapped[Optional[str]] = mapped_column(INET, nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    details: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    details: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="audit_logs")

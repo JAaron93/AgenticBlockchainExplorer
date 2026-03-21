@@ -5,7 +5,7 @@ collectors, supporting a modular plugin-like architecture.
 """
 
 import logging
-from typing import Dict, Type, Optional
+from typing import Dict, Type, Optional, List
 
 from collectors.base import ExplorerCollector
 from collectors.etherscan import EtherscanCollector
@@ -58,10 +58,11 @@ class CollectorRegistry:
         Returns:
             The collector class or None if not found.
         """
-        return cls._collectors.get(chain.lower())
+        normalized_chain = chain.lower()
+        return cls._collectors.get(normalized_chain)
 
     @classmethod
-    def list_supported_chains(cls) -> list[str]:
+    def list_supported_chains(cls) -> List[str]:
         """List all supported blockchain chains.
 
         Returns:

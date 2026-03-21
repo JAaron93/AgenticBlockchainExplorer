@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from typing import Dict, List, Any
 from collectors.models import Transaction, Holder, ExplorerData, ActivityType
 
 
@@ -19,7 +20,7 @@ class StablecoinSummary:
     total_volume: Decimal = Decimal("0")
     unique_addresses: int = 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "total_transactions": self.total_transactions,
@@ -32,25 +33,25 @@ class StablecoinSummary:
 class AggregatedData:
     """Aggregated data from all explorers with summary statistics."""
 
-    transactions: list[Transaction] = field(default_factory=list)
-    holders: list[Holder] = field(default_factory=list)
-    explorers_queried: list[str] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
+    transactions: List[Transaction] = field(default_factory=list)
+    holders: List[Holder] = field(default_factory=list)
+    explorers_queried: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
 
     # Summary statistics
-    by_stablecoin: dict[str, StablecoinSummary] = field(default_factory=dict)
-    by_activity_type: dict[str, int] = field(default_factory=dict)
+    by_stablecoin: Dict[str, StablecoinSummary] = field(default_factory=dict)
+    by_activity_type: Dict[str, int] = field(default_factory=dict)
     # by_chain counts total records (transactions + holders) per chain.
     # This is intentionally a combined metric representing all data collected
     # from each blockchain network.
-    by_chain: dict[str, int] = field(default_factory=dict)
+    by_chain: Dict[str, int] = field(default_factory=dict)
 
     @property
     def total_records(self) -> int:
         """Get total number of records."""
         return len(self.transactions) + len(self.holders)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "summary": {
@@ -74,7 +75,7 @@ class DataAggregator:
     """
 
     def aggregate(
-        self, explorer_results: list[ExplorerData]
+        self, explorer_results: List[ExplorerData]
     ) -> AggregatedData:
         """Aggregate data from multiple explorer results.
 
@@ -87,8 +88,8 @@ class DataAggregator:
         """
         result = AggregatedData()
 
-        all_transactions: list[Transaction] = []
-        all_holders: list[Holder] = []
+        all_transactions: List[Transaction] = []
+        all_holders: List[Holder] = []
 
         for explorer_data in explorer_results:
             result.explorers_queried.append(explorer_data.explorer_name)
@@ -131,8 +132,8 @@ class DataAggregator:
 
     def deduplicate_transactions(
         self,
-        transactions: list[Transaction]
-    ) -> list[Transaction]:
+        transactions: List[Transaction]
+    ) -> List[Transaction]:
         """Remove duplicate transactions based on transaction hash.
 
         When duplicates are found (same transaction hash), keeps the first
@@ -145,7 +146,7 @@ class DataAggregator:
         Returns:
             List of unique transactions
         """
-        seen: dict[tuple[str, str], Transaction] = {}
+        seen: Dict[tuple[str, str], Transaction] = {}
         duplicates_count = 0
 
         for tx in transactions:
@@ -175,7 +176,7 @@ class DataAggregator:
 
         return list(seen.values())
 
-    def merge_holder_data(self, holders: list[Holder]) -> list[Holder]:
+    def merge_holder_data(self, holders: List[Holder]) -> List[Holder]:
         """Merge holder data from multiple sources.
 
         When the same address holds the same stablecoin on the same chain
@@ -191,7 +192,7 @@ class DataAggregator:
         Returns:
             List of merged unique holders
         """
-        merged: dict[tuple[str, str, str], Holder] = {}
+        merged: Dict[tuple[str, str, str], Holder] = {}
         merges_count = 0
 
         for holder in holders:
@@ -253,13 +254,13 @@ class DataAggregator:
             data: AggregatedData object to populate with statistics
         """
         # Initialize counters
-        stablecoin_stats: dict[str, StablecoinSummary] = {}
-        activity_counts: dict[str, int] = {}
+        stablecoin_stats: Dict[str, StablecoinSummary] = {}
+        activity_counts: Dict[str, int] = {}
         # chain_counts tracks total records (transactions + holders) per chain
-        chain_counts: dict[str, int] = {}
+        chain_counts: Dict[str, int] = {}
 
         # Track unique addresses per stablecoin
-        stablecoin_addresses: dict[str, set[str]] = {}
+        stablecoin_addresses: Dict[str, set[str]] = {}
 
         # Process transactions - count each transaction toward its chain
         for tx in data.transactions:

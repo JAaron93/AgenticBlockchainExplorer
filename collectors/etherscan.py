@@ -1,13 +1,10 @@
 """Etherscan blockchain explorer collector."""
 
 import logging
-from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Optional
 
 from config.models import ExplorerConfig, RetryConfig
 from collectors.base import ExplorerCollector
-from collectors.models import Transaction, Holder, ActivityType
 
 
 # Use standard logging to avoid circular imports

@@ -82,7 +82,7 @@ class MasterPipelineOutput:
     wallet_classifications: Optional[WalletClassificationOutput] = None
     run_metadata: Dict[str, Any] = field(default_factory=dict)
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "activity_breakdown": self.activity_breakdown.to_dict(),
