@@ -54,7 +54,14 @@ async def get_authorized_run_details(
             detail="Run not found",
         )
 
-    if details["user_id"] != user.user_id and not user.has_permission("admin:config"):
+    user_id = details.get("user_id")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Run details missing user_id",
+        )
+
+    if user_id != user.user_id and not user.has_permission("admin:config"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"You don't have permission to {action} this run",

@@ -87,20 +87,34 @@ async def _get_secure_http_client():
 
 # Lazy import for blockchain validator to avoid circular imports
 _blockchain_validator = None
+_blockchain_validator_lock = None
+_blockchain_validator_lock_init = threading.Lock()
 
 
-def _get_blockchain_validator():
+def _get_blockchain_validator_lock() -> asyncio.Lock:
+    """Get or create the blockchain validator lock (async-safe)."""
+    global _blockchain_validator_lock
+    if _blockchain_validator_lock is None:
+        with _blockchain_validator_lock_init:
+            if _blockchain_validator_lock is None:
+                _blockchain_validator_lock = asyncio.Lock()
+    return _blockchain_validator_lock
+
+
+async def _get_blockchain_validator():
     """Get or create the blockchain validator singleton."""
     global _blockchain_validator
     if _blockchain_validator is None:
-        try:
-            from core.security.blockchain_validator import BlockchainDataValidator
+        async with _get_blockchain_validator_lock():
+            if _blockchain_validator is None:
+                try:
+                    from core.security.blockchain_validator import BlockchainDataValidator
 
-            _blockchain_validator = BlockchainDataValidator()
-            logger.debug("BlockchainDataValidator initialized for ExplorerCollector")
-        except Exception as e:
-            logger.warning(f"Failed to initialize BlockchainDataValidator: {e}")
-            _blockchain_validator = False  # Mark as failed, don't retry
+                    _blockchain_validator = BlockchainDataValidator()
+                    logger.debug("BlockchainDataValidator initialized for ExplorerCollector")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize BlockchainDataValidator: {e}")
+                    _blockchain_validator = False  # Mark as failed, don't retry
     return _blockchain_validator if _blockchain_validator else None
 
 
@@ -127,7 +141,7 @@ def init_collector_locks():
     created on the correct event loop, avoiding potential race conditions
     or loop binding issues with lazy initialization.
     """
-    global _secure_http_client_lock, _schema_validator_lock
+    global _secure_http_client_lock, _schema_validator_lock, _blockchain_validator_lock
 
     # Initialize secure http client lock
     if _secure_http_client_lock is None:
@@ -142,6 +156,13 @@ def init_collector_locks():
             if _schema_validator_lock is None:
                 _schema_validator_lock = asyncio.Lock()
                 logger.debug("Initialized _schema_validator_lock")
+                
+    # Initialize blockchain validator lock
+    if _blockchain_validator_lock is None:
+        with _blockchain_validator_lock_init:
+            if _blockchain_validator_lock is None:
+                _blockchain_validator_lock = asyncio.Lock()
+                logger.debug("Initialized _blockchain_validator_lock")
 
 
 async def _get_schema_validator():
@@ -181,14 +202,15 @@ class CollectorTimeoutError(Exception):
 
 
 class ExplorerCollector(ABC):
-    # Token decimals (override in subclasses)
-    TOKEN_DECIMALS: dict[str, int] = {}
     """Abstract base class for blockchain explorer data collectors.
     
     Provides common functionality for rate limiting, retry logic,
     and response validation. Concrete implementations must implement
     the fetch_stablecoin_transactions and fetch_token_holders methods.
     """
+    
+    # Token decimals (override in subclasses)
+    TOKEN_DECIMALS: dict[str, int] = {}
 
     def __init__(
         self, config: ExplorerConfig, retry_config: Optional[RetryConfig] = None
@@ -801,9 +823,9 @@ class ExplorerCollector(ABC):
         zero_address = "0x0000000000000000000000000000000000000000"
 
         if from_address.lower() == zero_address:
-            return ActivityType.OTHER  # Minting
+            return getattr(ActivityType, "MINT", ActivityType.OTHER)  # Minting
         if to_address.lower() == zero_address:
-            return ActivityType.OTHER  # Burning
+            return getattr(ActivityType, "BURN", ActivityType.OTHER)  # Burning
 
         # Standard transfer
         if amount > 0 and from_address and to_address:
@@ -811,7 +833,7 @@ class ExplorerCollector(ABC):
 
         return ActivityType.UNKNOWN
 
-    def _parse_transaction(
+    async def _parse_transaction(
         self, tx_data: dict, stablecoin: str
     ) -> Optional[Transaction]:
         """Parse a transaction from API response data.
@@ -830,7 +852,7 @@ class ExplorerCollector(ABC):
             value = tx_data.get("value", "0")
 
             # Validate using BlockchainDataValidator if available
-            validator = _get_blockchain_validator()
+            validator = await _get_blockchain_validator()
             if validator:
                 if tx_hash and not validator.validate_tx_hash(tx_hash):
                     logger.warning(
@@ -942,7 +964,7 @@ class ExplorerCollector(ABC):
             return transactions
 
         for tx_data in result[:limit]:
-            tx = self._parse_transaction(tx_data, stablecoin)
+            tx = await self._parse_transaction(tx_data, stablecoin)
             if tx:
                 transactions.append(tx)
 
@@ -953,7 +975,7 @@ class ExplorerCollector(ABC):
 
         return transactions
 
-    def _parse_holder(
+    async def _parse_holder(
         self, holder_data: dict, stablecoin: str, contract_address: str
     ) -> Optional[Holder]:
         """Parse a holder from API response data."""
@@ -961,7 +983,7 @@ class ExplorerCollector(ABC):
             address = holder_data.get("TokenHolderAddress", "")
             balance_str = holder_data.get("TokenHolderQuantity", "0")
 
-            validator = _get_blockchain_validator()
+            validator = await _get_blockchain_validator()
             if validator:
                 if address and not validator.validate_address(address):
                     logger.warning(
@@ -972,15 +994,20 @@ class ExplorerCollector(ABC):
                 address = validator.normalize_address(address)
 
             balance = self._parse_amount(balance_str, stablecoin)
-            now = datetime.now(timezone.utc)
+            
+            # The holder-list API does not provide real timestamps for first_seen
+            # and last_activity, so we set them to None to avoid masking real data 
+            # with datetime.now(). They should be populated from real API fields if available.
+            first_seen = None
+            last_activity = None
 
             return Holder(
                 address=address,
                 balance=balance,
                 stablecoin=stablecoin,
                 chain=self.chain,
-                first_seen=now,
-                last_activity=now,
+                first_seen=first_seen,
+                last_activity=last_activity,
                 is_store_of_value=False,
                 source_explorer=self.name,
             )
@@ -1045,7 +1072,7 @@ class ExplorerCollector(ABC):
             return holders
 
         for holder_data in result[:limit]:
-            holder = self._parse_holder(holder_data, stablecoin, contract_address)
+            holder = await self._parse_holder(holder_data, stablecoin, contract_address)
             if holder:
                 holders.append(holder)
 

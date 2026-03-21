@@ -599,8 +599,33 @@ async def download_result(
             detail="No output file available for this run",
         )
 
-    file_path = Path(result["output_file_path"])
-    if not file_path.exists():
+    # Path resolution and sanitization for security
+    from core.security.safe_path_handler import SafePathHandler
+
+    try:
+        from main import get_config
+
+        config = get_config()
+        output_dir = config.output.directory
+    except Exception:
+        # Fallback to default if config not available
+        output_dir = "./output"
+
+    safe_handler = SafePathHandler(output_dir)
+    file_path_str = result["output_file_path"]
+    resolved_file_path = (Path(file_path_str)).resolve()
+
+    # Ensure the resolved path is within the allowed output directory
+    if not safe_handler.validate_path(resolved_file_path):
+        logger.warning(
+            f"Attempted path traversal detected: {resolved_file_path} is not within {safe_handler.base_directory}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid output file path",
+        )
+
+    if not resolved_file_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Output file not found on server",
@@ -620,7 +645,7 @@ async def download_result(
     logger.info(f"User {user.user_id} downloading result for run {run_id}")
 
     return FileResponse(
-        path=file_path,
-        filename=file_path.name,
+        path=resolved_file_path,
+        filename=resolved_file_path.name,
         media_type="application/json",
     )

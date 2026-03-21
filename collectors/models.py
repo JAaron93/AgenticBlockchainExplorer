@@ -80,8 +80,8 @@ class Holder:
     balance: Decimal
     stablecoin: str
     chain: str
-    first_seen: datetime
-    last_activity: datetime
+    first_seen: Optional[datetime]
+    last_activity: Optional[datetime]
     is_store_of_value: bool
     source_explorer: str
 
@@ -95,7 +95,7 @@ class Holder:
             raise ValueError(f"Invalid stablecoin: {self.stablecoin}")
         if self.chain not in ("ethereum", "bsc", "polygon"):
             raise ValueError(f"Invalid chain: {self.chain}")
-        if self.first_seen > self.last_activity:
+        if self.first_seen and self.last_activity and self.first_seen > self.last_activity:
             raise ValueError("First seen cannot be after last activity")
     
     def to_dict(self) -> dict:
@@ -105,8 +105,8 @@ class Holder:
             "balance": str(self.balance),
             "stablecoin": self.stablecoin,
             "chain": self.chain,
-            "first_seen": self.first_seen.isoformat(),
-            "last_activity": self.last_activity.isoformat(),
+            "first_seen": self.first_seen.isoformat() if self.first_seen else None,
+            "last_activity": self.last_activity.isoformat() if self.last_activity else None,
             "is_store_of_value": self.is_store_of_value,
             "source_explorer": self.source_explorer,
         }

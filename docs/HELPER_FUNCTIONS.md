@@ -37,7 +37,7 @@ When creating a new blockchain collector (e.g. `ArbitrumCollector`), inherit fro
 from collectors.base import ExplorerCollector
 
 class ArbitrumCollector(ExplorerCollector):
-    TOKEN_DECIMALS = {"USDC": 6, "USDT": 18}
+    TOKEN_DECIMALS = {"USDC": 6, "USDT": 6}
     
     def __init__(self, config, retry_config=None):
         super().__init__(config, retry_config)
