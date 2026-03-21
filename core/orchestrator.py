@@ -16,12 +16,9 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from config.models import Config, ExplorerConfig, TimeoutConfig
-from collectors.base import ExplorerCollector
-from collectors.models import ExplorerData
-from collectors.etherscan import EtherscanCollector
-from collectors.bscscan import BscscanCollector
-from collectors.polygonscan import PolygonscanCollector
-from collectors.classifier import ActivityClassifier
+from collectors.registry import CollectorRegistry
+from core.analysis_service import AnalysisService
+from core.services.collection import CollectionService
 from collectors.aggregator import DataAggregator, AggregatedData
 from collectors.exporter import JSONExporter
 from core.db_manager import DatabaseManager
@@ -66,21 +63,6 @@ def _set_run_id(run_id: Optional[str]) -> None:
         set_run_id(run_id)
     except ImportError:
         pass  # core.logging not available, skip
-
-
-# Type alias for collector classes
-CollectorType = (
-    type[EtherscanCollector]
-    | type[BscscanCollector]
-    | type[PolygonscanCollector]
-)
-
-# Mapping of chain names to collector classes
-COLLECTOR_CLASSES: dict[str, CollectorType] = {
-    "ethereum": EtherscanCollector,
-    "bsc": BscscanCollector,
-    "polygon": PolygonscanCollector,
-}
 
 
 @dataclass
@@ -162,7 +144,8 @@ class AgentOrchestrator:
         self._user_id = user_id
         self._run_config = run_config or RunConfig()
         self._collectors: list[ExplorerCollector] = []
-        self._classifier = ActivityClassifier()
+        self._collection_service = CollectionService(config)
+        self._analysis_service = AnalysisService()
         self._aggregator = DataAggregator()
         self._exporter = JSONExporter(
             db_manager=db_manager,
@@ -255,7 +238,7 @@ class AgentOrchestrator:
         Returns:
             Collector instance or None if chain is not supported.
         """
-        collector_class = COLLECTOR_CLASSES.get(explorer_config.chain)
+        collector_class = CollectorRegistry.get_collector_class(explorer_config.chain)
         if collector_class is None:
             logger.warning(
                 f"No collector available for chain '{explorer_config.chain}'",
@@ -483,62 +466,24 @@ class AgentOrchestrator:
     async def collect_from_all_explorers(self) -> list[ExplorerData]:
         """Collect data from all configured explorers in parallel.
 
-        Uses asyncio.gather to execute collectors concurrently.
-        Handles partial failures by continuing with available data.
-
         Returns:
             List of ExplorerData from each collector.
         """
-        self._collectors = self._initialize_collectors()
-
-        if not self._collectors:
-            logger.error(
-                "No collectors initialized",
-                extra={"run_id": self._run_id}
-            )
-            return []
-
         await self.update_progress(0.1, "Starting data collection")
 
-        # Execute all collectors in parallel
-        tasks = []
-        for collector in self._collectors:
-            # Create task and track it (Requirement 6.3)
-            task = asyncio.create_task(self._collect_from_explorer(collector))
-            self._pending_tasks.append(task)
-            
-            # Remove from pending tasks when done
-            # We use a lambda to capturing the task object safely 
-            # or simply use the method since the callback receives the task
-            task.add_done_callback(lambda t: self._pending_tasks.remove(t) if t in self._pending_tasks else None)
-            
-            tasks.append(task)
+        stablecoins = list(self._run_config.stablecoins or self._config.stablecoins.keys())
+        explorers = self._run_config.explorers
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Process results, handling any exceptions
-        explorer_data: list[ExplorerData] = []
-        for i, result in enumerate(results):
-            collector = self._collectors[i]
-            if isinstance(result, BaseException):
-                logger.error(
-                    f"Collector {collector.name} raised exception: {result}",
-                    extra={
-                        "run_id": self._run_id,
-                        "explorer": collector.name,
-                        "error": str(result),
-                    }
-                )
-                explorer_data.append(ExplorerData(
-                    explorer_name=collector.name,
-                    chain=collector.chain,
-                    errors=[f"Exception: {result}"]
-                ))
-            elif isinstance(result, ExplorerData):
-                explorer_data.append(result)
+        results = await self._collection_service.collect_parallel(
+            stablecoins=stablecoins,
+            explorers=explorers,
+            max_records=self._run_config.max_records_per_explorer,
+            run_id=self._run_id,
+            timeout_manager=self._timeout_manager
+        )
 
         await self.update_progress(0.5, "Data collection complete")
-        return explorer_data
+        return results
 
     def _classify_data(self, data: AggregatedData) -> AggregatedData:
         """Classify transactions and holders in the aggregated data.
@@ -558,13 +503,9 @@ class AgentOrchestrator:
             }
         )
 
-        # Classify each transaction
-        for tx in data.transactions:
-            tx.activity_type = self._classifier.classify_transaction(tx)
-
-        # Classify holders as store of value
-        for holder in data.holders:
-            self._classifier.classify_holder(holder, data.transactions)
+        # Use AnalysisService for unified classification
+        data.transactions = self._analysis_service.classify_transactions(data.transactions)
+        data.holders = self._analysis_service.classify_holders(data.holders, data.transactions)
 
         return data
 

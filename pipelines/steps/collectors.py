@@ -17,6 +17,8 @@ from zenml import step
 
 from collectors.models import Transaction, Holder, ExplorerData
 from collectors.aggregator import DataAggregator, AggregatedData
+from collectors.registry import CollectorRegistry
+from core.services.collection import CollectionService
 
 
 logger = logging.getLogger(__name__)
@@ -238,7 +240,18 @@ async def _run_etherscan_collection(
     """
     import os
     from config.models import ExplorerConfig, RetryConfig
-    from collectors.etherscan import EtherscanCollector
+    
+    collector_class = CollectorRegistry.get_collector_class("ethereum")
+    if not collector_class:
+        errors.append("Etherscan collector not registered")
+        return CollectorOutput(
+            transactions_df=transactions_to_dataframe([]),
+            holders_df=holders_to_dataframe([]),
+            explorer_name="etherscan",
+            chain="ethereum",
+            success=False,
+            errors=errors,
+        )
     
     # Ethereum contract addresses for stablecoins
     ETHEREUM_CONTRACTS = {
@@ -280,7 +293,7 @@ async def _run_etherscan_collection(
             if coin in ETHEREUM_CONTRACTS
         }
         
-        async with EtherscanCollector(config, retry_config) as collector:
+        async with collector_class(config, retry_config) as collector:
             result: ExplorerData = await collector.collect_all(
                 stablecoins=stablecoin_contracts,
                 max_records=max_records,
@@ -315,54 +328,41 @@ def etherscan_collector_step(
     date_range_days: int = 7,
     max_records: int = 1000,
 ) -> CollectorOutput:
-    """ZenML step to collect stablecoin data from Etherscan.
-    
-    Wraps the EtherscanCollector as a ZenML step with typed outputs.
-    Handles API errors gracefully and returns partial results when possible.
-    
-    Args:
-        stablecoins: List of stablecoin symbols to collect (default: USDC, USDT)
-        date_range_days: Number of days of historical data to collect
-        max_records: Maximum number of records per stablecoin
-        
-    Returns:
-        CollectorOutput containing transactions and holders DataFrames
-        
-    Requirements: 9.1, 9.2, 9.4
-    """
+    """ZenML step to collect stablecoin data from Etherscan."""
     import uuid
+    from core.config import get_config
     run_id = str(uuid.uuid4())
     
-    logger.info(
-        "Starting Etherscan collection step",
-        extra={
-            "stablecoins": stablecoins,
-            "date_range_days": date_range_days,
-            "max_records": max_records,
-            "run_id": run_id,
-        }
-    )
+    config = get_config()
+    service = CollectionService(config)
     
-    # Run async collection in sync context
-    result = asyncio.run(_run_etherscan_collection(
+    results = asyncio.run(service.collect_parallel(
         stablecoins=stablecoins,
-        date_range_days=date_range_days,
+        explorers=["etherscan"],
         max_records=max_records,
-        run_id=run_id,
+        run_id=run_id
     ))
     
-    logger.info(
-        f"Etherscan collection complete: {len(result.transactions_df)} transactions, "
-        f"{len(result.holders_df)} holders",
-        extra={
-            "transactions": len(result.transactions_df),
-            "holders": len(result.holders_df),
-            "success": result.success,
-            "errors": len(result.errors),
-        }
+    if not results:
+        return CollectorOutput(
+            transactions_df=transactions_to_dataframe([]),
+            holders_df=holders_to_dataframe([]),
+            explorer_name="etherscan",
+            chain="ethereum",
+            success=False,
+            errors=["No results from collection service"]
+        )
+        
+    res = results[0]
+    return CollectorOutput(
+        transactions_df=transactions_to_dataframe(res.transactions),
+        holders_df=holders_to_dataframe(res.holders),
+        explorer_name=res.explorer_name,
+        chain=res.chain,
+        success=res.success,
+        errors=res.errors,
+        collection_time_seconds=res.collection_time_seconds
     )
-    
-    return result
 
 
 async def _run_bscscan_collection(
@@ -384,7 +384,18 @@ async def _run_bscscan_collection(
     """
     import os
     from config.models import ExplorerConfig, RetryConfig
-    from collectors.bscscan import BscscanCollector
+    
+    collector_class = CollectorRegistry.get_collector_class("bsc")
+    if not collector_class:
+        errors.append("BscScan collector not registered")
+        return CollectorOutput(
+            transactions_df=transactions_to_dataframe([]),
+            holders_df=holders_to_dataframe([]),
+            explorer_name="bscscan",
+            chain="bsc",
+            success=False,
+            errors=errors,
+        )
     
     # BSC contract addresses for stablecoins
     BSC_CONTRACTS = {
@@ -426,7 +437,7 @@ async def _run_bscscan_collection(
             if coin in BSC_CONTRACTS
         }
         
-        async with BscscanCollector(config, retry_config) as collector:
+        async with collector_class(config, retry_config) as collector:
             result: ExplorerData = await collector.collect_all(
                 stablecoins=stablecoin_contracts,
                 max_records=max_records,
@@ -461,54 +472,41 @@ def bscscan_collector_step(
     date_range_days: int = 7,
     max_records: int = 1000,
 ) -> CollectorOutput:
-    """ZenML step to collect stablecoin data from BscScan.
-    
-    Wraps the BscscanCollector as a ZenML step with typed outputs.
-    Handles API errors gracefully and returns partial results when possible.
-    
-    Args:
-        stablecoins: List of stablecoin symbols to collect (default: USDC, USDT)
-        date_range_days: Number of days of historical data to collect
-        max_records: Maximum number of records per stablecoin
-        
-    Returns:
-        CollectorOutput containing transactions and holders DataFrames
-        
-    Requirements: 9.1, 9.2
-    """
+    """ZenML step to collect stablecoin data from BscScan."""
     import uuid
+    from core.config import get_config
     run_id = str(uuid.uuid4())
     
-    logger.info(
-        "Starting BscScan collection step",
-        extra={
-            "stablecoins": stablecoins,
-            "date_range_days": date_range_days,
-            "max_records": max_records,
-            "run_id": run_id,
-        }
-    )
+    config = get_config()
+    service = CollectionService(config)
     
-    # Run async collection in sync context
-    result = asyncio.run(_run_bscscan_collection(
+    results = asyncio.run(service.collect_parallel(
         stablecoins=stablecoins,
-        date_range_days=date_range_days,
+        explorers=["bscscan"],
         max_records=max_records,
-        run_id=run_id,
+        run_id=run_id
     ))
     
-    logger.info(
-        f"BscScan collection complete: {len(result.transactions_df)} transactions, "
-        f"{len(result.holders_df)} holders",
-        extra={
-            "transactions": len(result.transactions_df),
-            "holders": len(result.holders_df),
-            "success": result.success,
-            "errors": len(result.errors),
-        }
+    if not results:
+        return CollectorOutput(
+            transactions_df=transactions_to_dataframe([]),
+            holders_df=holders_to_dataframe([]),
+            explorer_name="bscscan",
+            chain="bsc",
+            success=False,
+            errors=["No results from collection service"]
+        )
+        
+    res = results[0]
+    return CollectorOutput(
+        transactions_df=transactions_to_dataframe(res.transactions),
+        holders_df=holders_to_dataframe(res.holders),
+        explorer_name=res.explorer_name,
+        chain=res.chain,
+        success=res.success,
+        errors=res.errors,
+        collection_time_seconds=res.collection_time_seconds
     )
-    
-    return result
 
 
 async def _run_polygonscan_collection(
@@ -530,7 +528,18 @@ async def _run_polygonscan_collection(
     """
     import os
     from config.models import ExplorerConfig, RetryConfig
-    from collectors.polygonscan import PolygonscanCollector
+    
+    collector_class = CollectorRegistry.get_collector_class("polygon")
+    if not collector_class:
+        errors.append("Polygonscan collector not registered")
+        return CollectorOutput(
+            transactions_df=transactions_to_dataframe([]),
+            holders_df=holders_to_dataframe([]),
+            explorer_name="polygonscan",
+            chain="polygon",
+            success=False,
+            errors=errors,
+        )
     
     # Polygon contract addresses for stablecoins
     POLYGON_CONTRACTS = {
@@ -572,7 +581,7 @@ async def _run_polygonscan_collection(
             if coin in POLYGON_CONTRACTS
         }
         
-        async with PolygonscanCollector(config, retry_config) as collector:
+        async with collector_class(config, retry_config) as collector:
             result: ExplorerData = await collector.collect_all(
                 stablecoins=stablecoin_contracts,
                 max_records=max_records,
@@ -607,54 +616,41 @@ def polygonscan_collector_step(
     date_range_days: int = 7,
     max_records: int = 1000,
 ) -> CollectorOutput:
-    """ZenML step to collect stablecoin data from Polygonscan.
-    
-    Wraps the PolygonscanCollector as a ZenML step with typed outputs.
-    Handles API errors gracefully and returns partial results when possible.
-    
-    Args:
-        stablecoins: List of stablecoin symbols to collect (default: USDC, USDT)
-        date_range_days: Number of days of historical data to collect
-        max_records: Maximum number of records per stablecoin
-        
-    Returns:
-        CollectorOutput containing transactions and holders DataFrames
-        
-    Requirements: 9.1, 9.2
-    """
+    """ZenML step to collect stablecoin data from Polygonscan."""
     import uuid
+    from core.config import get_config
     run_id = str(uuid.uuid4())
     
-    logger.info(
-        "Starting Polygonscan collection step",
-        extra={
-            "stablecoins": stablecoins,
-            "date_range_days": date_range_days,
-            "max_records": max_records,
-            "run_id": run_id,
-        }
-    )
+    config = get_config()
+    service = CollectionService(config)
     
-    # Run async collection in sync context
-    result = asyncio.run(_run_polygonscan_collection(
+    results = asyncio.run(service.collect_parallel(
         stablecoins=stablecoins,
-        date_range_days=date_range_days,
+        explorers=["polygonscan"],
         max_records=max_records,
-        run_id=run_id,
+        run_id=run_id
     ))
     
-    logger.info(
-        f"Polygonscan collection complete: {len(result.transactions_df)} transactions, "
-        f"{len(result.holders_df)} holders",
-        extra={
-            "transactions": len(result.transactions_df),
-            "holders": len(result.holders_df),
-            "success": result.success,
-            "errors": len(result.errors),
-        }
+    if not results:
+        return CollectorOutput(
+            transactions_df=transactions_to_dataframe([]),
+            holders_df=holders_to_dataframe([]),
+            explorer_name="polygonscan",
+            chain="polygon",
+            success=False,
+            errors=["No results from collection service"]
+        )
+        
+    res = results[0]
+    return CollectorOutput(
+        transactions_df=transactions_to_dataframe(res.transactions),
+        holders_df=holders_to_dataframe(res.holders),
+        explorer_name=res.explorer_name,
+        chain=res.chain,
+        success=res.success,
+        errors=res.errors,
+        collection_time_seconds=res.collection_time_seconds
     )
-    
-    return result
 
 
 @step

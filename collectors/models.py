@@ -84,6 +84,7 @@ class Holder:
     last_activity: Optional[datetime]
     is_store_of_value: bool
     source_explorer: str
+    is_sov_heuristic: bool = False
 
     def __post_init__(self) -> None:
         """Validate holder data after initialization."""
@@ -108,6 +109,7 @@ class Holder:
             "first_seen": self.first_seen.isoformat() if self.first_seen else None,
             "last_activity": self.last_activity.isoformat() if self.last_activity else None,
             "is_store_of_value": self.is_store_of_value,
+            "is_sov_heuristic": self.is_sov_heuristic,
             "source_explorer": self.source_explorer,
         }
 

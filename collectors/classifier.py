@@ -138,4 +138,5 @@ class ActivityClassifier:
         """
         is_sov = self.identify_store_of_value(holder, transactions)
         holder.is_store_of_value = is_sov
+        holder.is_sov_heuristic = is_sov
         return holder

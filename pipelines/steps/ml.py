@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
 import pandas as pd
 from zenml import step
+from core.model_registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -569,6 +570,13 @@ def train_sov_predictor_step(
             }
         )
         
+        # Save model to registry
+        try:
+            registry = ModelRegistry()
+            registry.save_model("sov_predictor", model, metadata=training_metadata)
+        except Exception as reg_err:
+            logger.warning(f"Could not save model to registry: {reg_err}")
+
         return SoVModelOutput(
             model=model,
             metrics=metrics,
@@ -610,6 +618,21 @@ def predict_sov_step(
     logger.info(f"Starting SoV prediction inference with {len(features_df)} holders")
     
     try:
+        # Load model from registry if not provided or provided as a string/path
+        if model is None or isinstance(model, str):
+            model_name = model if isinstance(model, str) and model else "sov_predictor"
+            registry = ModelRegistry()
+            loaded_model = registry.load_model(model_name)
+            if loaded_model is None:
+                logger.warning(f"No model found in registry for '{model_name}'. Skipping inference.")
+                # Return empty predictions or heuristic-based ones
+                return SoVPredictionOutput(
+                    predictions_df=pd.DataFrame(columns=["address", "sov_probability", "predicted_class"]),
+                    prediction_count=0,
+                    metadata={"error": "Model not found in registry"}
+                )
+            model = loaded_model
+
         if len(features_df) == 0:
             # Return empty predictions
             return SoVPredictionOutput(

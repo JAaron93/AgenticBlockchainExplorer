@@ -1,5 +1,6 @@
 import re
 import sys
+from pathlib import Path
 
 
 def modify_file(filepath, callback):
@@ -377,16 +378,10 @@ def refactor_subclass(filepath):
         print(f"Warning: _parse_timestamp not found in {filepath}")
 
 
-modify_file(
-    "/Users/pretermodernist/AgenticBlockchainExplorer/collectors/base.py", refactor_base
-)
-refactor_subclass(
-    "/Users/pretermodernist/AgenticBlockchainExplorer/collectors/etherscan.py"
-)
-refactor_subclass(
-    "/Users/pretermodernist/AgenticBlockchainExplorer/collectors/bscscan.py"
-)
-refactor_subclass(
-    "/Users/pretermodernist/AgenticBlockchainExplorer/collectors/polygonscan.py"
-)
+BASE_DIR = Path(__file__).parent / "collectors"
+
+modify_file(BASE_DIR / "base.py", refactor_base)
+refactor_subclass(BASE_DIR / "etherscan.py")
+refactor_subclass(BASE_DIR / "bscscan.py")
+refactor_subclass(BASE_DIR / "polygonscan.py")
 print("Done refactoring collectors.")
