@@ -571,17 +571,13 @@ def train_sov_predictor_step(
             }
         )
         
-        # Save model to registry
+        # Save model to registry (Critical)
         try:
             registry = ModelRegistry()
             registry.save_model("sov_predictor", model, metadata=training_metadata)
-        except (IOError, OSError) as reg_err:
-            logger.exception(f"Could not save model to registry due to persistence error: {reg_err}")
-        except ValueError as reg_err:
-            logger.error(f"Invalid model name or identifier for 'sov_predictor': {reg_err}")
-            raise ModelPersistenceError("sov_predictor", reg_err) from reg_err
         except Exception as reg_err:
-            logger.exception(f"Unexpected error saving model to registry: {reg_err}")
+            logger.exception(f"Failed to save model 'sov_predictor' to registry: {reg_err}")
+            raise ModelPersistenceError("sov_predictor", reg_err) from reg_err
 
         return SoVModelOutput(
             model=model,

@@ -5,22 +5,25 @@ from datetime import datetime, timezone
 from core.analysis_service import AnalysisService
 from collectors.models import Holder
 
-def test_classify_holders_with_duplicates_raises_error():
+@pytest.fixture
+def sample_holder():
+    """Fixture returning a sample Holder instance."""
+    return Holder(
+        address="0x123",
+        balance=Decimal("100"),
+        stablecoin="USDC",
+        chain="ethereum",
+        first_seen=datetime.now(timezone.utc),
+        last_activity=datetime.now(timezone.utc),
+        is_store_of_value=False,
+        source_explorer="etherscan"
+    )
+
+def test_classify_holders_with_duplicates_raises_error(sample_holder):
     service = AnalysisService()
     
     # Setup holders
-    holders = [
-        Holder(
-            address="0x123",
-            balance=Decimal("100"),
-            stablecoin="USDC",
-            chain="ethereum",
-            first_seen=datetime.now(timezone.utc),
-            last_activity=datetime.now(timezone.utc),
-            is_store_of_value=False,
-            source_explorer="etherscan"
-        )
-    ]
+    holders = [sample_holder]
     
     # Setup duplicate predictions
     sov_predictions = pd.DataFrame({
@@ -37,22 +40,11 @@ def test_classify_holders_with_duplicates_raises_error():
             sov_predictions=sov_predictions
         )
 
-def test_classify_holders_normal_operation():
+def test_classify_holders_normal_operation(sample_holder):
     service = AnalysisService()
     
     # Setup holders
-    holders = [
-        Holder(
-            address="0x123",
-            balance=Decimal("100"),
-            stablecoin="USDC",
-            chain="ethereum",
-            first_seen=datetime.now(timezone.utc),
-            last_activity=datetime.now(timezone.utc),
-            is_store_of_value=False,
-            source_explorer="etherscan"
-        )
-    ]
+    holders = [sample_holder]
     
     # Setup valid predictions
     sov_predictions = pd.DataFrame({

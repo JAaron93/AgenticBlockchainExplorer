@@ -262,7 +262,7 @@ class TestErrorIsolation:
         # Parse transactions
         results = []
         for tx_data in test_data:
-            tx = collector._parse_transaction(tx_data, "USDC")
+            tx = await collector._parse_transaction(tx_data, "USDC")
             if tx:
                 results.append(tx)
         
@@ -372,7 +372,8 @@ class TestConcurrentCollections:
 class TestBlockchainValidatorIntegration:
     """Test BlockchainDataValidator integration with collectors."""
 
-    def test_address_normalization_in_transaction_parsing(
+    @pytest.mark.asyncio
+    async def test_address_normalization_in_transaction_parsing(
         self, mock_explorer_config, mock_retry_config
     ):
         """Test that addresses are normalized to lowercase.
@@ -391,14 +392,15 @@ class TestBlockchainValidatorIntegration:
             "blockNumber": "12345678",
         }
         
-        tx = collector._parse_transaction(tx_data, "USDC")
+        tx = await collector._parse_transaction(tx_data, "USDC")
         
         # Addresses should be normalized to lowercase
         assert tx is not None, "Transaction should be parsed successfully"
         assert tx.from_address == "0x" + "a" * 40
         assert tx.to_address == "0x" + "b" * 40
 
-    def test_holder_address_normalization(
+    @pytest.mark.asyncio
+    async def test_holder_address_normalization(
         self, mock_explorer_config, mock_retry_config
     ):
         """Test that holder addresses are normalized to lowercase.
@@ -413,7 +415,7 @@ class TestBlockchainValidatorIntegration:
             "TokenHolderQuantity": "1000000000",
         }
         
-        holder = collector._parse_holder(holder_data, "USDC", "0x" + "d" * 40)
+        holder = await collector._parse_holder(holder_data, "USDC", "0x" + "d" * 40)
         
         # Address should be normalized to lowercase
         assert holder is not None, "Holder should be parsed successfully"

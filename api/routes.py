@@ -353,7 +353,12 @@ async def run_agent_task(
 
     try:
         # Get application configuration
-        app_config = get_config()
+        try:
+            from main import get_config
+            app_config = get_config()
+        except (ImportError, ModuleNotFoundError, RuntimeError) as e:
+            logger.error(f"Failed to load configuration for background task: {e}")
+            raise
 
         # Build run-specific config from the request
         run_config = None
@@ -606,8 +611,11 @@ async def download_result(
         from main import get_config
         config = get_config()
         output_dir = Path(config.output.directory).resolve()
-    except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
+    except (ImportError, ModuleNotFoundError, AttributeError):
         # Fallback to default if config not available or missing attributes
+        logger.warning(
+            "Configuration access failed for download_result; falling back to Path('./output').resolve()"
+        )
         output_dir = Path("./output").resolve()
 
     safe_handler = SafePathHandler(output_dir)
