@@ -326,33 +326,8 @@ class ModelPerformanceMonitor:
         
         return result
     
-    def should_block_promotion(self, result: MonitoringResult) -> bool:
-        """Determine if model promotion should be blocked.
-        
-        Args:
-            result: Monitoring result from check_model
-            
-        Returns:
-            True if promotion should be blocked
-            
-        Requirements: 15.5
-        """
-        if not result.is_degraded:
-            return False
-        
-        # Block if any critical violations
-        if result.severity == DegradationSeverity.CRITICAL:
-            return True
-        
-        # Block if configured to require all thresholds
-        if self.config.require_all_thresholds and result.violations:
-            return True
-        
         return False
     
-    def get_audit_log(self) -> List[Dict[str, Any]]:
-        """Get the audit log of monitoring checks."""
-        return self._audit_log.copy()
     
     def _generate_recommendation(
         self,
@@ -537,25 +512,3 @@ def check_model_performance(
     )
 
 
-def is_model_degraded(
-    model_name: str,
-    metrics: Dict[str, float],
-    config_path: Optional[Path] = None,
-) -> bool:
-    """Quick check if model shows degradation.
-    
-    Args:
-        model_name: Name of the model
-        metrics: Model metrics
-        config_path: Optional path to config file
-        
-    Returns:
-        True if model shows degradation
-    """
-    result = check_model_performance(
-        model_name=model_name,
-        model_version="check",
-        metrics=metrics,
-        config_path=config_path,
-    )
-    return result.is_degraded

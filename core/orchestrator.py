@@ -8,15 +8,13 @@ termination.
 Requirements: 3.7, 3.8, 3.9, 3.10, 6.1, 6.2, 6.3, 6.6
 """
 
-import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-from config.models import Config, ExplorerConfig, TimeoutConfig
-from collectors.registry import CollectorRegistry
+from config.models import Config, TimeoutConfig
 from core.analysis_service import AnalysisService
 from core.services.collection import CollectionService
 from collectors.aggregator import DataAggregator, AggregatedData
@@ -143,7 +141,6 @@ class AgentOrchestrator:
         self._db_manager = db_manager
         self._user_id = user_id
         self._run_config = run_config or RunConfig()
-        self._collectors: list[ExplorerCollector] = []
         self._collection_service = CollectionService(config)
         self._analysis_service = AnalysisService()
         self._aggregator = DataAggregator()
@@ -156,7 +153,6 @@ class AgentOrchestrator:
         self._timeout_manager: Optional[Any] = None
         self._graceful_terminator: Optional[Any] = None
         self._start_time: Optional[datetime] = None
-        self._pending_tasks: List[asyncio.Task[Any]] = []
         self._partial_results: List[ExplorerData] = []
 
     @property
@@ -227,90 +223,6 @@ class AgentOrchestrator:
                     extra={"run_id": self._run_id}
                 )
 
-    def _create_collector(
-        self, explorer_config: ExplorerConfig
-    ) -> Optional[ExplorerCollector]:
-        """Create a collector instance for the given explorer config.
-
-        Args:
-            explorer_config: Configuration for the explorer.
-
-        Returns:
-            Collector instance or None if chain is not supported.
-        """
-        collector_class = CollectorRegistry.get_collector_class(explorer_config.chain)
-        if collector_class is None:
-            logger.warning(
-                f"No collector available for chain '{explorer_config.chain}'",
-                extra={"run_id": self._run_id, "chain": explorer_config.chain}
-            )
-            return None
-
-        collector = collector_class(
-            config=explorer_config,
-            retry_config=self._config.retry
-        )
-        return collector
-
-    def _initialize_collectors(self) -> list[ExplorerCollector]:
-        """Initialize collector instances from configuration.
-
-        Respects run_config.explorers filter if specified.
-
-        Returns:
-            List of initialized collectors.
-        """
-        collectors = []
-        allowed_explorers = self._run_config.explorers
-
-        for explorer_config in self._config.explorers:
-            # Filter by explorer names if specified in run config
-            if allowed_explorers is not None:
-                if explorer_config.name not in allowed_explorers:
-                    logger.debug(
-                        f"Skipping {explorer_config.name} (not in run config)",
-                        extra={"run_id": self._run_id}
-                    )
-                    continue
-
-            collector = self._create_collector(explorer_config)
-            if collector:
-                collectors.append(collector)
-                logger.info(
-                    f"Initialized collector for {explorer_config.name}",
-                    extra={
-                        "run_id": self._run_id,
-                        "explorer": explorer_config.name,
-                        "chain": explorer_config.chain,
-                    }
-                )
-        return collectors
-
-    def _get_stablecoin_addresses(self, chain: str) -> dict[str, str]:
-        """Get stablecoin contract addresses for a chain.
-
-        Respects run_config.stablecoins filter if specified.
-
-        Args:
-            chain: The blockchain chain name.
-
-        Returns:
-            Dict mapping stablecoin symbol to contract address.
-        """
-        addresses = {}
-        allowed_stablecoins = self._run_config.stablecoins
-
-        for symbol, config in self._config.stablecoins.items():
-            # Filter by stablecoin symbols if specified in run config
-            if allowed_stablecoins is not None:
-                if symbol not in allowed_stablecoins:
-                    continue
-
-            address = getattr(config, chain, None)
-            if address:
-                addresses[symbol] = address
-        return addresses
-
     async def update_progress(
         self,
         progress: float,
@@ -340,128 +252,6 @@ class AgentOrchestrator:
                 f"Failed to update progress: {e}",
                 extra={"run_id": self._run_id, "error": str(e)}
             )
-
-    async def _collect_from_explorer(
-        self,
-        collector: ExplorerCollector
-    ) -> ExplorerData:
-        """Collect data from a single explorer with timeout enforcement.
-
-        Implements graceful error handling to return partial results
-        when collection partially fails. The explorer is considered
-        successful if any data was collected, even with errors.
-        
-        Uses TimeoutManager for per-collection timeout enforcement.
-
-        Args:
-            collector: The collector to use.
-
-        Returns:
-            ExplorerData with collected transactions and holders,
-            including any errors encountered.
-            
-        Requirements: 6.1, 6.2, 6.6
-        """
-        stablecoins = self._get_stablecoin_addresses(collector.chain)
-        # Use run config override if specified, otherwise use app config
-        max_records = (
-            self._run_config.max_records_per_explorer
-            or self._config.output.max_records_per_explorer
-        )
-
-        logger.info(
-            f"Starting collection from {collector.name}",
-            extra={
-                "run_id": self._run_id,
-                "explorer": collector.name,
-                "chain": collector.chain,
-                "stablecoins": list(stablecoins.keys()),
-                "max_records": max_records,
-            }
-        )
-
-        async def do_collection() -> ExplorerData:
-            """Inner collection function to wrap with timeout."""
-            async with collector:
-                return await collector.collect_all(
-                    stablecoins=stablecoins,
-                    max_records=max_records,
-                    run_id=self._run_id
-                )
-
-        try:
-            # Use TimeoutManager if available (Requirement 6.1, 6.2)
-            if self._timeout_manager:
-                result = await self._timeout_manager.run_with_timeout(
-                    do_collection(),
-                    collection_name=collector.name,
-                )
-            else:
-                result = await do_collection()
-            
-            # Store partial result for graceful termination
-            self._partial_results.append(result)
-            
-            # Log result summary
-            if result.errors:
-                logger.warning(
-                    f"Collection from {collector.name} completed with {len(result.errors)} errors",
-                    extra={
-                        "run_id": self._run_id,
-                        "explorer": collector.name,
-                        "total_records": result.total_records,
-                        "error_count": len(result.errors),
-                        "partial_success": result.total_records > 0,
-                    }
-                )
-            else:
-                logger.info(
-                    f"Collection from {collector.name} completed successfully",
-                    extra={
-                        "run_id": self._run_id,
-                        "explorer": collector.name,
-                        "total_records": result.total_records,
-                    }
-                )
-            
-            return result
-            
-        except asyncio.TimeoutError as e:
-            error_msg = f"Collection timed out for {collector.name}"
-            logger.error(
-                error_msg,
-                extra={
-                    "run_id": self._run_id,
-                    "explorer": collector.name,
-                    "error_type": "timeout",
-                }
-            )
-            result = ExplorerData(
-                explorer_name=collector.name,
-                chain=collector.chain,
-                errors=[error_msg]
-            )
-            self._partial_results.append(result)
-            return result
-        except Exception as e:
-            error_msg = f"Collection failed for {collector.name}: {type(e).__name__}: {e}"
-            logger.error(
-                error_msg,
-                extra={
-                    "run_id": self._run_id,
-                    "explorer": collector.name,
-                    "error_type": type(e).__name__,
-                    "error": str(e),
-                },
-                exc_info=True
-            )
-            result = ExplorerData(
-                explorer_name=collector.name,
-                chain=collector.chain,
-                errors=[error_msg]
-            )
-            self._partial_results.append(result)
-            return result
 
     async def collect_from_all_explorers(self) -> list[ExplorerData]:
         """Collect data from all configured explorers in parallel.
@@ -751,7 +541,7 @@ class AgentOrchestrator:
             # Use GracefulTerminator to persist partial results
             termination_report = await self._graceful_terminator.terminate(
                 reason=reason,
-                pending_tasks=self._pending_tasks,
+                pending_tasks=[],
                 partial_results=explorer_results,
             )
             

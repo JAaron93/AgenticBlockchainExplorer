@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from zenml import pipeline, get_step_context
+from zenml import pipeline
 from zenml.config.schedule import Schedule
 
 from pipelines.steps.collectors import (

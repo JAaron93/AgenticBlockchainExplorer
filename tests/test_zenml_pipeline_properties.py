@@ -138,31 +138,6 @@ def valid_holder_model(draw):
     )
 
 
-@st.composite
-def valid_collector_output(draw, chain: str = "ethereum", explorer: str = "etherscan"):
-    """Generate a valid CollectorOutput."""
-    transactions = draw(st.lists(valid_transaction_model(), min_size=0, max_size=20))
-    holders = draw(st.lists(valid_holder_model(), min_size=0, max_size=10))
-    
-    # Override chain for consistency
-    for tx in transactions:
-        object.__setattr__(tx, 'chain', chain)
-    for h in holders:
-        object.__setattr__(h, 'chain', chain)
-    
-    success = len(transactions) > 0 or len(holders) > 0
-    errors = [] if success else ["No data collected"]
-    
-    return CollectorOutput(
-        transactions_df=transactions_to_dataframe(transactions),
-        holders_df=holders_to_dataframe(holders),
-        explorer_name=explorer,
-        chain=chain,
-        success=success,
-        errors=errors,
-        collection_time_seconds=draw(st.floats(min_value=0.0, max_value=60.0)),
-    )
-
 
 # =============================================================================
 # Property Tests for ZenML Steps
