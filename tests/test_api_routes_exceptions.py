@@ -27,8 +27,8 @@ async def test_download_result_fallback_on_config_error():
         stack.enter_context(patch("api.routes.get_authorized_run_details", return_value=mock_details))
         mock_logger = stack.enter_context(patch("api.routes.logger"))
         mock_get_config = stack.enter_context(patch("main.get_config"))
-        MockHandler = stack.enter_context(patch("core.security.safe_path_handler.SafePathHandler"))
-        stack.enter_context(patch("pathlib.Path.exists", return_value=True))
+        MockHandler = stack.enter_context(patch("api.routes.SafePathHandler"))
+        stack.enter_context(patch("api.routes.Path.exists", return_value=True))
         MockResponse = stack.enter_context(patch("api.routes.FileResponse"))
         
         # Setup specific mock behaviors

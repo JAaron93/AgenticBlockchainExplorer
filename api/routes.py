@@ -36,6 +36,7 @@ from core.auth0_manager import (
 from core.database import get_database
 from core.db_manager import DatabaseManager, InvalidUUIDError
 from core.orchestrator import AgentOrchestrator, RunConfig
+from core.security.safe_path_handler import SafePathHandler
 
 logger = logging.getLogger(__name__)
 
@@ -605,7 +606,6 @@ async def download_result(
         )
 
     # Path resolution and sanitization for security
-    from core.security.safe_path_handler import SafePathHandler
 
     try:
         from main import get_config

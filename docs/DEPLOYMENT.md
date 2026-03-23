@@ -317,7 +317,9 @@ aws cloudfront create-invalidation \
 
 ### Model Performance Monitoring
 
-Configure thresholds in `config/ml_thresholds.json`:
+Configure thresholds in `config/ml_thresholds.json` (a standalone monitoring config, separate from the main `config.json`):
+
+> **Note:** This file is only required if you're using the optional `ModelPerformanceMonitor` pipeline step. It is not part of the core application configuration loaded by `ConfigurationManager`.
 
 ```json
 {

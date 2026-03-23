@@ -74,3 +74,76 @@ async def get_run_status(
     run = await get_authorized_run(run_id, user, db_manager)
     return StatusResponse(run_id=run.run_id, status=run.status)
 ```
+
+---
+
+## 3. Collector Registry (`collectors/registry.py`)
+
+A class-level registry that maps blockchain chain names to their `ExplorerCollector` subclasses, enabling a modular plugin-like architecture. Three collectors are registered by default: `EtherscanCollector` (`"ethereum"`), `BscscanCollector` (`"bsc"`), and `PolygonscanCollector` (`"polygon"`).
+
+### Available Class Methods
+
+- **`CollectorRegistry.register(chain, collector_class)`**
+  Registers a new collector for the given chain name (case-insensitive). Logs a warning if an existing entry is overwritten.
+
+- **`CollectorRegistry.get_collector_class(chain) → Optional[Type[ExplorerCollector]]`**
+  Returns the collector class for the given chain, or `None` if not registered.
+
+- **`CollectorRegistry.list_supported_chains() → List[str]`**
+  Returns a list of all currently registered chain names.
+
+### Adding a New Collector
+
+Inherit from `ExplorerCollector`, then register the new class with the registry before running any collection:
+
+```python
+from collectors.base import ExplorerCollector
+from collectors.registry import CollectorRegistry
+
+class ArbitrumCollector(ExplorerCollector):
+    TOKEN_DECIMALS = {"USDC": 6, "USDT": 6}
+
+    def __init__(self, config, retry_config=None):
+        super().__init__(config, retry_config)
+
+# Register once at startup (e.g., in main.py or a config module)
+CollectorRegistry.register("arbitrum", ArbitrumCollector)
+```
+
+No changes to `CollectionService` or `AgentOrchestrator` are needed — the service resolves the collector class from the registry at runtime via `get_collector_class`.
+
+---
+
+## 4. Collection Service (`core/services/collection.py`)
+
+Encapsulates parallel data collection across all enabled blockchain explorers. Previously this logic lived inside `AgentOrchestrator`; it was extracted to `CollectionService` for modularity and testability.
+
+### Constructor
+
+```python
+from core.services.collection import CollectionService
+from config.models import Config
+
+service = CollectionService(config)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `config` | `Config` | Full application configuration (explorers, stablecoins, retry settings) |
+
+### Available Methods
+
+- **`await service.collect_parallel(stablecoins, explorers=None, max_records=None, run_id=None, timeout_manager=None) → List[ExplorerData]`**
+  Fans out collection to all enabled explorers concurrently using `asyncio.gather`. Failed collectors return partial `ExplorerData` objects with an `errors` list rather than raising, so one collector failure doesn't abort the others.
+
+### How It Fits Together
+
+```
+AgentOrchestrator
+    └── CollectionService.collect_parallel(...)
+            └── CollectorRegistry.get_collector_class(chain)
+                    └── ExplorerCollector.collect_all(...)
+```
+
+`AgentOrchestrator` instantiates `CollectionService` and calls `collect_parallel`. The service resolves each collector class from `CollectorRegistry`, instantiates it with the relevant `ExplorerConfig`, and runs all collectors concurrently. Results are always returned — errors are captured in the `ExplorerData.errors` field rather than propagated as exceptions.
+

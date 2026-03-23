@@ -65,7 +65,7 @@ cp config.example.production.json config.json
      ```bash
      # Generate a secure 32-byte (256-bit) secret key
      python -c "import secrets; print(secrets.token_urlsafe(32))"
-     
+
      # Alternative using OpenSSL
      openssl rand -base64 32
      ```
