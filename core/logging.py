@@ -9,7 +9,7 @@ import sys
 from contextvars import ContextVar
 from typing import Any, Optional
 
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 
 
 # Context variable for storing the current run_id across async operations
@@ -55,7 +55,7 @@ class CorrelationIdFilter(logging.Filter):
         return True
 
 
-class CustomJsonFormatter(jsonlogger.JsonFormatter):
+class CustomJsonFormatter(JsonFormatter):
     """Custom JSON formatter with additional fields for structured logging."""
     
     def __init__(
